@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#faf9f6">
+  <title>Add Artwork · AR Art &amp; Design Archive</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+</head>
+<body data-page="upload">
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html" aria-label="Back to archive">
+        <span class="brand-mark" aria-hidden="true">◐</span>
+        <span class="brand-text">
+          <span class="brand-title">AR Art &amp; Design Archive</span>
+          <span class="brand-sub">Scanned student works in augmented reality</span>
+        </span>
+      </a>
+      <nav class="nav">
+        <a class="btn btn-ghost" href="index.html">← Back to archive</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container container-narrow">
+    <h1 class="page-title">Add an artwork</h1>
+    <p class="page-lead">Export your scan from Scaniverse as a <strong>.glb</strong> file, then fill in the details below. It will appear in the archive right away on this device.</p>
+
+    <form id="uploadForm" class="form" novalidate>
+
+      <fieldset>
+        <legend>Artwork</legend>
+
+        <div class="form-row">
+          <label for="title">Artwork title <span class="req">*</span></label>
+          <input id="title" name="title" type="text" required maxlength="100" placeholder="e.g. Letterform Sculpture">
+        </div>
+
+        <div class="form-row">
+          <label for="description">Description</label>
+          <textarea id="description" name="description" rows="4" maxlength="800" placeholder="Concept, materials, process…"></textarea>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>People &amp; class</legend>
+
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="student">Student name <span class="req">*</span></label>
+            <input id="student" name="student" type="text" required maxlength="80" autocomplete="name">
+          </div>
+          <div class="form-row">
+            <label for="lecturer">Lecturer name <span class="req">*</span></label>
+            <input id="lecturer" name="lecturer" type="text" required maxlength="80">
+          </div>
+          <div class="form-row">
+            <label for="className">Class name <span class="req">*</span></label>
+            <input id="className" name="className" type="text" required maxlength="80" placeholder="e.g. Typography II">
+          </div>
+          <div class="form-row">
+            <label for="classCode">Class code <span class="req">*</span></label>
+            <input id="classCode" name="classCode" type="text" required maxlength="20" placeholder="e.g. DK202" style="text-transform:uppercase">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label for="period">Time period / semester <span class="req">*</span></label>
+          <input id="period" name="period" type="text" required maxlength="40" list="periodSuggestions" placeholder="e.g. Odd 2026/2027">
+          <datalist id="periodSuggestions"></datalist>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>3D model</legend>
+
+        <div class="form-row">
+          <label for="modelFile">Model file (.glb) <span class="req">*</span></label>
+          <input id="modelFile" name="modelFile" type="file" accept=".glb,model/gltf-binary" required>
+          <p class="help">Recommended under 30&nbsp;MB so it loads quickly on phones.</p>
+        </div>
+
+        <div id="previewBox" class="preview-box" hidden>
+          <p class="preview-label">Preview — rotate it to choose the thumbnail angle</p>
+          <model-viewer id="previewViewer" camera-controls touch-action="pan-y" auto-rotate shadow-intensity="1" environment-image="neutral" alt="Preview of the uploaded 3D model"></model-viewer>
+        </div>
+      </fieldset>
+
+      <p id="formError" class="form-error" role="alert" hidden></p>
+
+      <div class="form-actions">
+        <button type="submit" id="submitBtn" class="btn btn-primary btn-lg">Save to archive</button>
+        <a class="btn btn-ghost btn-lg" href="index.html">Cancel</a>
+      </div>
+    </form>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
