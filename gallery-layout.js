@@ -18,7 +18,7 @@
 
 export const DOOR_W = 3.2;
 export const WALL_T = 0.3;
-export const CORR_L = 10.6;     // corridor length between interior wall faces
+export const CORR_L = 0;       // doors of consecutive rooms share a wall
 export const PLAYER_R = 0.35;
 
 const SIDE_CYCLE = ['N', 'W', 'N', 'E', 'W', 'E'];

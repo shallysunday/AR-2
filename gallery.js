@@ -127,6 +127,7 @@ export class ArchitecturalGallery {
 
     this.playerPos = [0, 0];
     this.playerYaw = 0;
+    this.playerPitch = 0; // Vertical look angle in radians.
 
     this.isDragging = false;
     this.dragDistance = 0;
@@ -392,7 +393,7 @@ export class ArchitecturalGallery {
   }
 
   async buildMuseumGeometry() {
-    const H = 5;
+    const H = 8;
     const total = this.plan.entries.length;
 
     const wallMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
@@ -1018,8 +1019,14 @@ export class ArchitecturalGallery {
       if (!this.isDragging) return;
 
       const dx = event.clientX - this.previousMousePosition.x;
-      this.dragDistance += Math.abs(dx);
+      const dy = event.clientY - this.previousMousePosition.y;
+      this.dragDistance += Math.abs(dx) + Math.abs(dy);
       this.playerYaw -= dx * 0.005;
+      this.playerPitch = THREE.MathUtils.clamp(
+        this.playerPitch - dy * 0.005,
+        -1.35,
+        1.35
+      );
 
       this.previousMousePosition = {
         x: event.clientX,
@@ -1047,9 +1054,16 @@ export class ArchitecturalGallery {
 
       const dx = event.touches[0].clientX -
         this.previousMousePosition.x;
+      const dy = event.touches[0].clientY -
+        this.previousMousePosition.y;
 
-      this.dragDistance += Math.abs(dx);
+      this.dragDistance += Math.abs(dx) + Math.abs(dy);
       this.playerYaw -= dx * 0.005;
+      this.playerPitch = THREE.MathUtils.clamp(
+        this.playerPitch - dy * 0.005,
+        -1.35,
+        1.35
+      );
 
       this.previousMousePosition = {
         x: event.touches[0].clientX,
@@ -1255,10 +1269,12 @@ export class ArchitecturalGallery {
       this.playerPos[0], 1.7, this.playerPos[1]
     );
 
+    const pitchCos = Math.cos(this.playerPitch);
+    const pitchSin = Math.sin(this.playerPitch);
     this.camera.lookAt(
-      this.camera.position.x + forward[0],
-      this.camera.position.y,
-      this.camera.position.z + forward[1]
+      this.camera.position.x + forward[0] * pitchCos,
+      this.camera.position.y + pitchSin,
+      this.camera.position.z + forward[1] * pitchCos
     );
 
     this.renderer.render(this.scene, this.camera);
