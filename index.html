@@ -21,13 +21,15 @@
         </span>
       </a>
       <nav class="nav">
+        <button type="button" id="btn-grid-view" class="btn btn-primary active-tab">📋 Archive Grid</button>
+        <button type="button" id="btn-gallery-view" class="btn btn-ghost">🚶‍♂️ 3D Gallery</button>
         <a class="btn btn-primary" href="upload.html?v=4">+ Add artwork</a>
       </nav>
     </div>
   </header>
 
-  <main class="container">
-
+  <!-- VIEW 1: Traditional Search & Filter Grid -->
+  <main id="grid-view-container" class="container">
     <section class="controls" aria-label="Search and filters">
       <div class="field field-search">
         <label for="searchInput" class="sr-only">Search by student or lecturer</label>
@@ -60,8 +62,18 @@
       <p class="empty-title">No artworks found</p>
       <p class="empty-text">Try a different search or clear the filters.</p>
     </div>
-
   </main>
+
+  <!-- VIEW 2: Immersive 3D Procedural Architectural Gallery Walkthrough -->
+  <section id="gallery-view-container" style="display: none;">
+    <div class="gallery-hud">
+      <span class="hud-instruction">💡 Click &amp; drag to look around. Jump to class:</span>
+      <select id="class-jump-select">
+        <option value="">Select Class Room...</option>
+      </select>
+    </div>
+    <div id="canvas-container"></div>
+  </section>
 
   <footer class="site-footer">
     <div class="container">
@@ -69,7 +81,7 @@
     </div>
   </footer>
 
-  <!-- Detail view -->
+  <!-- Detail view modal -->
   <div id="detailModal" class="modal" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
@@ -99,5 +111,66 @@
 
   <script src="config.js?v=4"></script>
   <script src="app.js?v=4"></script>
+
+  <!-- Gallery View Switcher & Three.js Initializer -->
+  <script type="module">
+    import { ArchitecturalGallery } from './gallery.js';
+
+    const gridView = document.getElementById('grid-view-container');
+    const galleryView = document.getElementById('gallery-view-container');
+    const btnGrid = document.getElementById('btn-grid-view');
+    const btnGallery = document.getElementById('btn-gallery-view');
+    const jumpSelect = document.getElementById('class-jump-select');
+
+    let galleryInstance = null;
+
+    btnGrid.addEventListener('click', () => {
+      gridView.style.display = 'block';
+      galleryView.style.display = 'none';
+      btnGrid.classList.add('btn-primary', 'active-tab');
+      btnGrid.classList.remove('btn-ghost');
+      btnGallery.classList.add('btn-ghost');
+      btnGallery.classList.remove('btn-primary', 'active-tab');
+    });
+
+    btnGallery.addEventListener('click', () => {
+      gridView.style.display = 'none';
+      galleryView.style.display = 'block';
+      btnGallery.classList.add('btn-primary', 'active-tab');
+      btnGallery.classList.remove('btn-ghost');
+      btnGrid.classList.add('btn-ghost');
+      btnGrid.classList.remove('btn-primary', 'active-tab');
+
+      if (!galleryInstance) {
+        galleryInstance = new ArchitecturalGallery(
+          document.getElementById('canvas-container'),
+          (art) => {
+            console.log("Selected art from 3D gallery:", art);
+          }
+        );
+
+        setTimeout(() => {
+          if (galleryInstance && galleryInstance.classes) {
+            jumpSelect.replaceChildren(document.createElement('option'));
+            jumpSelect.firstElementChild.value = '';
+            jumpSelect.firstElementChild.textContent = 'Jump to Class Room...';
+            galleryInstance.classes.forEach((cls, idx) => {
+              const opt = document.createElement('option');
+              opt.value = idx;
+              opt.textContent = `${cls.code}: ${cls.name}`;
+              jumpSelect.appendChild(opt);
+            });
+          }
+        }, 300);
+      }
+    });
+
+    jumpSelect.addEventListener('change', (e) => {
+      const idx = parseInt(e.target.value);
+      if (!isNaN(idx) && galleryInstance) {
+        galleryInstance.jumpToClass(idx);
+      }
+    });
+  </script>
 </body>
 </html>

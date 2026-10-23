@@ -6,7 +6,7 @@
 
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
-import { bestPlan, walkRects, mapPoint, artSlots, groupByClass, DOOR_W, WALL_T, CORR_L } from './gallery-layout.js';
+import { bestPlan, walkRects, artSlots, groupByClass, DOOR_W, WALL_T, CORR_L } from './gallery-layout.js';
 
 export class ArchitecturalGallery {
   constructor(containerEl, onSelectArtwork) {
@@ -26,7 +26,6 @@ export class ArchitecturalGallery {
     this.isTransitioning = false;
     
     // Controls state
-    this.keys = {};
     this.isDragging = false;
     this.previousMousePosition = { x: 0, y: 0 };
 
@@ -51,10 +50,10 @@ export class ArchitecturalGallery {
     this.container.appendChild(this.renderer.domElement);
 
     // 4. Lighting (Architectural soft studio lighting)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
     this.scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.65);
     dirLight.position.set(20, 40, 20);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 2048;
@@ -74,14 +73,14 @@ export class ArchitecturalGallery {
   }
 
   loadDataAndBuild() {
-    // Fetch items from localStorage (fallback to sample if empty)
-    const raw = localStorage.getItem('artArchiveItems');
+    // Fetch items from localStorage (matching app.js key)
+    const raw = localStorage.getItem('arArchive.items.v1');
     let items = raw ? JSON.parse(raw) : [];
     
     if (items.length === 0) {
       items = [
-        { title: "Cybernetic Vessel", studentName: "Jor Langit", lecturerName: "Dr. Aris", classCode: "DK202", className: "Advanced 3D Design", description: "Hard surface mech design study.", modelUrl: "https://modelviewer.dev/shared-assets/models/Astronaut.glb" },
-        { title: "Nusantara Typface Poster", studentName: "Siti Rahma", lecturerName: "Prof. Melati", classCode: "TYP101", className: "Typography I", description: "Revival of Rencong script.", modelUrl: "https://modelviewer.dev/shared-assets/models/Astronaut.glb" }
+        { title: "Astronaut Study", student: "Alya Putri", lecturer: "Dr. Budi Santoso", className: "Typography II", classCode: "DK202", modelUrl: "https://modelviewer.dev/shared-assets/models/Astronaut.glb" },
+        { title: "Expressive Robot", student: "Rizky Pratama", lecturer: "Maya Anggraini", className: "Character Design I", classCode: "DK115", modelUrl: "https://modelviewer.dev/shared-assets/models/RobotExpressive.glb" }
       ];
     }
 
@@ -101,7 +100,7 @@ export class ArchitecturalGallery {
     const floorMat = new THREE.MeshStandardMaterial({ color: 0xe5e5eb, roughness: 0.8 });
     const wallHeight = 5.0;
 
-    this.plan.entries.forEach((e, roomIdx) => {
+    this.plan.entries.forEach((e) => {
       const { W, D, P, yaw } = e;
       const roomGroup = new THREE.Group();
       roomGroup.position.set(P[0], 0, P[1]);
@@ -121,9 +120,8 @@ export class ArchitecturalGallery {
       ceiling.position.y = wallHeight;
       roomGroup.add(ceiling);
 
-      // Walls (North, South, East, West with door cutouts simplified as boxes)
-      // For brevity in clean architectural mockup style, we build perimeter walls:
-      this.buildWallsWithOpenings(roomGroup, W, D, wallHeight, whiteMat, e);
+      // Walls
+      this.buildWallsWithOpenings(roomGroup, W, D, wallHeight, whiteMat);
 
       // Add Class Sign over entrance/exit
       this.createRoomSign(roomGroup, W, D, wallHeight, this.classes[e.ci].name, this.classes[e.ci].code);
@@ -141,30 +139,25 @@ export class ArchitecturalGallery {
     });
   }
 
-  buildWallsWithOpenings(group, W, D, H, mat, roomMeta) {
-    // Simplified perimeter box walls
+  buildWallsWithOpenings(group, W, D, H, mat) {
     const t = WALL_T;
     const halfW = W / 2, halfD = D / 2;
 
-    // North wall
     const nWall = new THREE.Mesh(new THREE.BoxGeometry(W, H, t), mat);
     nWall.position.set(0, H/2, -halfD);
     nWall.castShadow = true; nWall.receiveShadow = true;
     group.add(nWall);
 
-    // South wall
     const sWall = new THREE.Mesh(new THREE.BoxGeometry(W, H, t), mat);
     sWall.position.set(0, H/2, halfD);
     sWall.castShadow = true; sWall.receiveShadow = true;
     group.add(sWall);
 
-    // West wall
     const wWall = new THREE.Mesh(new THREE.BoxGeometry(t, H, D), mat);
     wWall.position.set(-halfW, H/2, 0);
     wWall.castShadow = true; wWall.receiveShadow = true;
     group.add(wWall);
 
-    // East wall
     const eWall = new THREE.Mesh(new THREE.BoxGeometry(t, H, D), mat);
     eWall.position.set(halfW, H/2, 0);
     eWall.castShadow = true; eWall.receiveShadow = true;
@@ -172,22 +165,22 @@ export class ArchitecturalGallery {
   }
 
   createRoomSign(group, W, D, H, className, classCode) {
-    // Simple floating architectural text placard mockup (can be enhanced with canvas texture)
     const canvas = document.createElement('canvas');
     canvas.width = 512; canvas.height = 128;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#111';
+    ctx.fillStyle = '#1b1b1a';
     ctx.fillRect(0, 0, 512, 128);
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 36px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`${classCode}: ${className}`, 256, 75);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${classCode}: ${className}`, 256, 64);
 
     const texture = new THREE.CanvasTexture(canvas);
     const signMat = new THREE.MeshBasicMaterial({ map: texture });
     const signGeo = new THREE.PlaneGeometry(3.6, 0.9);
     const sign = new THREE.Mesh(signGeo, signMat);
-    sign.position.set(0, H - 1.2, D / 2 - 0.05);
+    sign.position.set(0, H - 1.2, D / 2 - 0.04);
     group.add(sign);
   }
 
@@ -203,7 +196,7 @@ export class ArchitecturalGallery {
     pedestal.castShadow = true; pedestal.receiveShadow = true;
     pedGroup.add(pedestal);
 
-    // Load 3D model or placeholder
+    // Load 3D model
     const loader = new GLTFLoader();
     loader.load(art.modelUrl || "https://modelviewer.dev/shared-assets/models/Astronaut.glb", (gltf) => {
       const model = gltf.scene;
@@ -212,13 +205,11 @@ export class ArchitecturalGallery {
       model.traverse(node => { if (node.isMesh) { node.castShadow = true; } });
       pedGroup.add(model);
     }, undefined, () => {
-      // Fallback shape if loading fails
-      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), new THREE.MeshStandardMaterial({color: 0x2563eb}));
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), new THREE.MeshStandardMaterial({color: 0x1b1b1a}));
       sphere.position.set(0, 1.5, 0);
       pedGroup.add(sphere);
     });
 
-    // Store reference for click interaction
     pedGroup.userData = { art };
     group.add(pedGroup);
   }
@@ -229,7 +220,6 @@ export class ArchitecturalGallery {
     if (!targetEntry) return;
 
     this.isTransitioning = true;
-    // Smooth camera glide animation to target room coordinates
     const startX = this.playerPos[0], startZ = this.playerPos[1];
     const targetX = targetEntry.P[0], targetZ = targetEntry.P[1];
     let progress = 0;
@@ -248,7 +238,6 @@ export class ArchitecturalGallery {
   }
 
   setupControls() {
-    // Basic mouse drag to look around
     this.container.addEventListener('mousedown', (e) => {
       this.isDragging = true;
       this.previousMousePosition = { x: e.clientX, y: e.clientY };
@@ -273,10 +262,7 @@ export class ArchitecturalGallery {
   animate() {
     requestAnimationFrame(() => this.animate());
 
-    // Update camera position based on playerPos
     this.camera.position.set(this.playerPos[0], 1.7, this.playerPos[1]);
-    
-    // Calculate look direction from playerYaw
     const lookDir = [Math.sin(this.playerYaw), 0, Math.cos(this.playerYaw)];
     this.camera.lookAt(this.camera.position.x - lookDir[0], this.camera.position.y, this.camera.position.z - lookDir[2]);
 
