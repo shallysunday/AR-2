@@ -209,7 +209,12 @@
           }
         );
 
-        // ★ CHANGED: fires on success OR failure — always clears overlay
+        // ★ CHANGED: real progress + early overlay hide
+        galleryInstance.onProgress = (frac, text) => {
+          if (loading.hidden) return;
+          loadingText.textContent = text || `${Math.round(frac * 100)}%`;
+        };
+
         galleryInstance.onReady = err => {
           clearTimers();
           loading.hidden = true;

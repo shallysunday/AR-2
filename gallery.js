@@ -1,13 +1,15 @@
 /* ==========================================================
    gallery.js — Procedural architectural museum walkthrough.
+   Optimised for smooth first paint on desktop + mobile.
 
-   Reads artworks from app.js (window.arArchive.loadAll) which
-   works in both cloud + local mode. Renders one white room per
-   classCode with doorways, class signs over every door, a
-   pedestal + info plaque per artwork, first-person walking,
-   a touch joystick, and a smooth waypoint-based class-jump
-   flight that follows the corridors instead of cutting through
-   walls. Also handles the pre/post seamless-loop teleport.
+   Key perf choices:
+   - MeshLambertMaterial (not Standard) for walls/floor/pedestals
+   - MeshBasicMaterial for signs + plaques (no lighting needed)
+   - 1024² shadow map (not 2048²), frustum sized from the layout
+   - Walls castShadow but DON'T receiveShadow (halves shadow work)
+   - Builds rooms one at a time and yields between each
+   - Models load through a concurrency-limited queue (3 at a time)
+   - Serialised GLTF parses so the main thread stays responsive
    ========================================================== */
 
 import * as THREE from 'three';
@@ -17,8 +19,13 @@ import {
   worldOf, rot, DOOR_W, WALL_T, CORR_L
 } from './gallery-layout.js';
 
+/* Sanity caps — the 3D view is a preview, not a spec sheet */
+const MAX_ARTWORKS_3D   = 80;
+const CONCURRENT_MODELS = 3;
+const PLAQUE_W = 1.1, PLAQUE_H = 0.72;
+
 /* ----------------------------------------------------------
-   Canvas texture helpers
+   Canvas textures
    ---------------------------------------------------------- */
 function makeSignCanvas(classCode, className, isEntrance) {
   const W = 512, H = 128;
@@ -26,117 +33,85 @@ function makeSignCanvas(classCode, className, isEntrance) {
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
 
-  // Dark plate — pops against white walls
   ctx.fillStyle = '#1b1b1a';
   ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(1, 1, W - 2, H - 2);
 
-  // Terracotta arrow
   ctx.fillStyle = '#c8553d';
   ctx.font = 'bold 56px -apple-system, "Segoe UI", sans-serif';
   ctx.textBaseline = 'middle';
   ctx.textAlign = isEntrance ? 'left' : 'right';
   ctx.fillText('→', isEntrance ? 24 : W - 24, H / 2 + 2);
 
-  // Main label
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 30px -apple-system, "Segoe UI", sans-serif';
+  ctx.font = 'bold 28px -apple-system, "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
-  const label = `${classCode}  ·  ${className.toUpperCase()}`;
-  ctx.fillText(label, W / 2, H / 2 + 2);
+  ctx.fillText(`${classCode}  ·  ${className.toUpperCase()}`, W / 2, H / 2 + 2);
 
   return c;
 }
 
 function makePlaqueCanvas(item) {
-  const W = 384, H = 256
+  const W = 384, H = 256;              // smaller than before
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
 
-  // Card
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = '#e7e5df';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(2, 2, W - 4, H - 4);
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, W - 3, H - 3);
 
-  // Class code
   ctx.fillStyle = '#c8553d';
-  ctx.font = 'bold 18px -apple-system, sans-serif';
+  ctx.font = 'bold 14px -apple-system, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText((item.classCode || '').toUpperCase(), 28, 46);
+  ctx.fillText((item.classCode || '').toUpperCase(), 18, 30);
 
-  // Title (may wrap 2 lines)
   ctx.fillStyle = '#1b1b1a';
-  ctx.font = 'bold 34px Georgia, serif';
-  const titleLines = wrapText(ctx, item.title || 'Untitled', W - 56, 2);
-  titleLines.forEach((line, i) => ctx.fillText(line, 28, 92 + i * 40));
+  ctx.font = 'bold 24px Georgia, serif';
+  const title = clamp(ctx, item.title || 'Untitled', W - 36, 26);
+  ctx.fillText(title, 18, 62);
 
-  let y = 92 + titleLines.length * 40;
+  ctx.font = 'bold 15px -apple-system, sans-serif';
+  ctx.fillText(clamp(ctx, item.student || '', W - 36, 15), 18, 92);
 
-  // Student + lecturer
-  ctx.fillStyle = '#1b1b1a';
-  ctx.font = 'bold 20px -apple-system, sans-serif';
-  ctx.fillText(item.student || '', 28, y + 14);
-  y += 34;
   ctx.fillStyle = '#5d5d58';
-  ctx.font = '16px -apple-system, sans-serif';
-  ctx.fillText(item.lecturer || '', 28, y + 10);
-  y += 30;
+  ctx.font = '13px -apple-system, sans-serif';
+  ctx.fillText(clamp(ctx, item.lecturer || '', W - 36, 13), 18, 112);
 
-  // Divider
   ctx.strokeStyle = '#e7e5df';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(28, y);
-  ctx.lineTo(W - 28, y);
-  ctx.stroke();
-  y += 16;
+  ctx.moveTo(18, 128); ctx.lineTo(W - 18, 128); ctx.stroke();
 
-  // Description (2 lines max)
   ctx.fillStyle = '#5d5d58';
-  ctx.font = '15px -apple-system, sans-serif';
-  const descLines = wrapText(ctx, item.description || '', W - 56, 2);
-  descLines.forEach((line, i) => ctx.fillText(line, 28, y + i * 20));
+  ctx.font = '12px -apple-system, sans-serif';
+  const words = String(item.description || '').split(/\s+/);
+  let line = '', y = 148;
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > W - 36) { ctx.fillText(line, 18, y); line = w; y += 16; if (y > 190) break; }
+    else line = test;
+  }
+  if (line && y <= 190) ctx.fillText(line, 18, y);
 
-  // CTA band
   ctx.fillStyle = '#1b1b1a';
-  ctx.fillRect(0, H - 56, W, 56);
+  ctx.fillRect(0, H - 42, W, 42);
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 20px -apple-system, sans-serif';
+  ctx.font = 'bold 14px -apple-system, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('TAP TO OPEN IN AR VIEWER  →', W / 2, H - 22);
+  ctx.fillText('TAP TO OPEN IN AR  →', W / 2, H - 16);
 
   return c;
 }
 
-function wrapText(ctx, text, maxWidth, maxLines) {
-  const words = String(text).split(/\s+/);
-  const lines = [];
-  let line = '';
-  for (const w of words) {
-    const test = line ? line + ' ' + w : w;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      lines.push(line);
-      line = w;
-      if (lines.length === maxLines - 1) break;
-    } else {
-      line = test;
-    }
-  }
-  if (line && lines.length < maxLines) lines.push(line);
-  return lines.map((l, i) => {
-    if (i === maxLines - 1 && lines.length === maxLines) {
-      // Add ellipsis if there's more text than fits
-      const rem = words.slice(words.indexOf(l.split(' ').pop()) + 1);
-      if (rem.length) return l.replace(/\s*\S*$/, '') + '…';
-    }
-    return l;
-  });
+function clamp(ctx, text, maxWidth, size) {
+  text = String(text);
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let cut = text;
+  while (cut.length > 1 && ctx.measureText(cut + '…').width > maxWidth) cut = cut.slice(0, -1);
+  return cut + '…';
 }
 
 /* ----------------------------------------------------------
@@ -147,6 +122,7 @@ export class ArchitecturalGallery {
     this.container = containerEl;
     this.onSelectArtwork = onSelectArtwork || null;
     this.onReady = null;
+    this.onProgress = null;
 
     this.scene = null;
     this.camera = null;
@@ -173,74 +149,49 @@ export class ArchitecturalGallery {
   }
 
   async init() {
-    /* Scene */
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf4f4f6);
-    this.scene.fog = new THREE.FogExp2(0xf4f4f6, 0.008);
+    this.scene.fog = new THREE.FogExp2(0xf4f4f6, 0.006);
 
-    /* Camera */
     this.camera = new THREE.PerspectiveCamera(
-      60,
-      this.container.clientWidth / this.container.clientHeight,
-      0.1, 1000
+      60, this.container.clientWidth / this.container.clientHeight, 0.1, 1000
     );
 
-    /* Renderer — ACES tone mapping for the "physical model" look */
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMappingExposure = 1.1;
     this.container.appendChild(this.renderer.domElement);
 
-    /* Lighting — soft studio */
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xcccccc, 0.55));
+    /* Lighting — kept minimal for perf */
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xdddddd, 0.55));
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 
-    const key = new THREE.DirectionalLight(0xfff6e8, 1.35);
+    const key = new THREE.DirectionalLight(0xfff3e0, 1.2);
     key.position.set(24, 40, 22);
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    key.shadow.bias = -0.0004;
-    key.shadow.camera.left = -60;
-    key.shadow.camera.right = 60;
-    key.shadow.camera.top = 60;
-    key.shadow.camera.bottom = -60;
-    key.shadow.camera.far = 200;
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.bias = -0.0005;
+    // Frustum is set once the layout is known (in loadDataAndBuild)
+    key.shadow.camera.far = 300;
     this.scene.add(key);
+    this.keyLight = key;
 
-    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.25);
-    fill.position.set(-30, 20, -20);
-    this.scene.add(fill);
-
-    /* Build */
     try {
       await this.loadDataAndBuild();
     } catch (e) {
       console.error('3D gallery build failed', e);
     }
 
-    /* Events + loop */
     window.addEventListener('resize', () => this.onWindowResize());
     this.setupControls();
     this.setupJoystick();
     this.animate();
 
-    try {
-      await this.loadDataAndBuild();
-    } catch (e) {
-      console.error('3D gallery build failed', e);
-      // ★ NEW: always fire onReady so the overlay hides
-      if (this.onError) this.onError(e);
-      if (this.onReady) this.onReady(e);
-    }
-
-    window.addEventListener('resize', () => this.onWindowResize());
-    this.setupControls();
-    this.setupJoystick();
-    this.animate();
+    if (this.onReady) this.onReady();
   }
 
   /* --------------------------------------------------------
@@ -249,9 +200,12 @@ export class ArchitecturalGallery {
   async loadItems() {
     const loadPromise = (async () => {
       if (window.arArchive && typeof window.arArchive.loadAll === 'function') {
-        const items = await window.arArchive.loadAll();
+        let items = await window.arArchive.loadAll();
+        if (items.length > MAX_ARTWORKS_3D) {
+          console.warn(`3D view capped to ${MAX_ARTWORKS_3D} / ${items.length} artworks`);
+          items = items.slice(0, MAX_ARTWORKS_3D);
+        }
 
-        // ★ CHANGED: parallel IndexedDB lookups instead of one-by-one
         const pending = items.filter(it => !it.modelUrl && window.arArchive.getModel);
         if (pending.length) {
           await Promise.all(pending.map(async it => {
@@ -262,14 +216,12 @@ export class ArchitecturalGallery {
                 this._blobUrls.push(url);
                 it.modelUrl = url;
               }
-            } catch (e) {
-              console.warn('Could not load model blob for', it.id, e);
-            }
+            } catch (e) { console.warn('blob load failed', it.id, e); }
           }));
         }
         return items;
       }
-      // Fallback: localStorage
+
       try {
         const raw = localStorage.getItem('arArchive.items.v1');
         if (raw) return JSON.parse(raw);
@@ -277,15 +229,11 @@ export class ArchitecturalGallery {
       return [];
     })();
 
-    const timeoutPromise = new Promise(res => setTimeout(() => res(null), 6000));
-    const items = await Promise.race([loadPromise, timeoutPromise]);
+    const timeout = new Promise(res => setTimeout(() => res(null), 6000));
+    const items = await Promise.race([loadPromise, timeout]);
+    if (items === null) console.warn('Archive load timed out — samples only');
 
-    if (items === null) {
-      console.warn('Archive load timed out — using samples only');
-    }
-
-    const finalItems = items || [];
-    if (finalItems.length === 0) {
+    if (!items || !items.length) {
       return [
         { title: 'Astronaut Study', student: 'Alya Putri', lecturer: 'Dr. Budi Santoso',
           className: 'Typography II', classCode: 'DK202',
@@ -295,277 +243,302 @@ export class ArchitecturalGallery {
           modelUrl: 'https://modelviewer.dev/shared-assets/models/RobotExpressive.glb' }
       ];
     }
-    return finalItems;
+    return items;
   }
 
   async loadDataAndBuild() {
+    const t0 = performance.now();
     const items = await this.loadItems();
+    console.log(`[gallery] items loaded: ${items.length} in ${(performance.now() - t0).toFixed(0)}ms`);
+
     this.classes = groupByClass(items);
+    if (!this.classes.length) { this.plan = { entries: [], corridors: [] }; this.walkRects = []; return; }
 
-    if (this.classes.length === 0) {
-      this.plan = { entries: [], corridors: [] };
-      this.walkRects = [];
-      if (this.onReady) this.onReady();
-      return;
-    }
-
+    const t1 = performance.now();
     this.plan = bestPlan(this.classes.map(c => c.items.length));
     this.walkRects = walkRects(this.plan);
-    this.buildMuseumGeometry();
+    console.log(`[gallery] layout: ${this.plan.entries.length} rooms in ${(performance.now() - t1).toFixed(0)}ms`);
 
-    // Place the player at the entrance of R0
+    // Size shadow frustum to fit the whole museum
+    this.fitShadowCamera();
+
+    const t2 = performance.now();
+    await this.buildMuseumGeometry();
+    console.log(`[gallery] geometry built in ${(performance.now() - t2).toFixed(0)}ms`);
+
+    // Spawn at the entrance of the first main room
     const r0 = this.plan.entries.find(e => e.role === 'main' && e.ci === 0);
     if (r0) {
       this.playerPos = [r0.P[0], r0.P[1] + r0.D / 2 - 2.5];
-      this.playerYaw = r0.yaw + Math.PI;   // face into the room
+      this.playerYaw = r0.yaw + Math.PI;
     }
 
-    if (this.onReady) this.onReady();
+    console.log(`[gallery] TOTAL build: ${(performance.now() - t0).toFixed(0)}ms · meshes: ${this.countMeshes()}`);
+  }
+
+  fitShadowCamera() {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const e of this.plan.entries) {
+      x0 = Math.min(x0, e.P[0] - e.W / 2);
+      x1 = Math.max(x1, e.P[0] + e.W / 2);
+      z0 = Math.min(z0, e.P[1] - e.D / 2);
+      z1 = Math.max(z1, e.P[1] + e.D / 2);
+    }
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    const span = Math.max(x1 - x0, z1 - z0) + 20;
+    const cam = this.keyLight.shadow.camera;
+    cam.left = -span / 2;
+    cam.right = span / 2;
+    cam.top = span / 2;
+    cam.bottom = -span / 2;
+    cam.updateProjectionMatrix();
+    // Keep the light above the centre of the museum
+    this.keyLight.position.set(cx + 24, 40, cz + 22);
+    this.keyLight.target.position.set(cx, 0, cz);
+    this.scene.add(this.keyLight.target);
+  }
+
+  countMeshes() {
+    let n = 0;
+    this.scene.traverse(o => { if (o.isMesh) n++; });
+    return n;
   }
 
   /* --------------------------------------------------------
-     Geometry
+     Geometry — builds one room per frame, yields between each
      -------------------------------------------------------- */
-  buildMuseumGeometry() {
-    const wallMat  = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0, metalness: 0.0 });
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0xe9e7e2, roughness: 0.95 });
-    const ceilMat  = new THREE.MeshStandardMaterial({ color: 0xfbfaf7, roughness: 1.0 });
+  async buildMuseumGeometry() {
     const H = 5.0;
+    const total = this.plan.entries.length;
 
-    // ★ NEW: texture caches — signTextures are shared between pre/post copies of the same class
-    const signTextures = new Map();      // `${code}-${isEntrance}`
-    const plaqueTextures = new Map();    // item.id
-    const getSignTex = (code, name, isEntrance) => {
-      const key = `${code}-${isEntrance ? 'in' : 'out'}`;
-      if (!signTextures.has(key)) {
-        const tex = new THREE.CanvasTexture(makeSignCanvas(code, name, isEntrance));
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.anisotropy = 2;
-        signTextures.set(key, tex);
-      }
-      return signTextures.get(key);
-    };
-    const getPlaqueTex = item => {
-      const key = item.id || item.title || Math.random();
-      if (!plaqueTextures.has(key)) {
-        const tex = new THREE.CanvasTexture(makePlaqueCanvas(item));
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.anisotropy = 2;
-        plaqueTextures.set(key, tex);
-      }
-      return plaqueTextures.get(key);
-    };
+    // Shared materials — created once, reused across every room
+    const wallMat  = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const floorMat = new THREE.MeshLambertMaterial({ color: 0xe9e7e2 });
+    const ceilMat  = new THREE.MeshLambertMaterial({ color: 0xfbfaf7 });
+    const pedMat   = new THREE.MeshLambertMaterial({ color: 0xfbfaf7 });
+    const plaqueGeo = new THREE.PlaneGeometry(PLAQUE_W, PLAQUE_H);
+    const signGeo   = new THREE.PlaneGeometry(3.2, 0.8);
+    const pedGeo    = new THREE.BoxGeometry(1.2, 1.1, 1.2);
 
-    this.plan.entries.forEach(entry => {
-      const { W, D, P, yaw } = entry;
+    // Shared textures — pre/post copies of the same class reuse these
+    const signTex  = new Map();   // `${code}-in|out`
+    const plaqueTex = new Map();  // item.id
+
+    const modelQueue = [];   // { group, art } — loaded AFTER rooms are built
+
+    for (let i = 0; i < total; i++) {
+      const entry = this.plan.entries[i];
+      const cls = this.classes[entry.ci];
+      if (!cls) continue;
+
       const room = new THREE.Group();
-      room.position.set(P[0], 0, P[1]);
-      room.rotation.y = yaw;
+      room.position.set(entry.P[0], 0, entry.P[1]);
+      room.rotation.y = entry.yaw;
 
-      const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), floorMat);
+      // Floor + ceiling (skip ceiling cast/receive)
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(entry.W, entry.D), floorMat);
       floor.rotation.x = -Math.PI / 2;
       floor.receiveShadow = true;
       room.add(floor);
 
-      const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(W, D), ceilMat);
+      const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(entry.W, entry.D), ceilMat);
       ceiling.rotation.x = Math.PI / 2;
       ceiling.position.y = H;
       room.add(ceiling);
 
-      this.buildWallsWithOpenings(room, entry, H, wallMat);
+      this.buildWalls(room, entry, H, wallMat);
 
-      const cls = this.classes[entry.ci];
-      if (cls) {
-        this.createDoorSign(room, entry, H, cls.code, cls.name, true, getSignTex);
-        this.createDoorSign(room, entry, H, cls.code, cls.name, false, getSignTex);
+      // Class signs
+      this.createSign(room, entry, cls.code, cls.name, true,  signGeo, signTex);
+      this.createSign(room, entry, cls.code, cls.name, false, signGeo, signTex);
 
-        const slots = artSlots(entry, cls.items.length);
-        cls.items.forEach((art, i) => {
-          const slot = slots[i];
-          if (!slot) return;
-          try {
-            this.createPedestalAndArtwork(room, slot, art, getPlaqueTex);
-          } catch (err) {
-            // ★ NEW: one bad artwork never kills the whole build
-            console.error('Pedestal for', art && art.title, 'failed:', err);
-          }
-        });
-      }
+      // Pedestals + plaques (models queued)
+      const slots = artSlots(entry, cls.items.length);
+      cls.items.forEach((art, idx) => {
+        const slot = slots[idx];
+        if (!slot) return;
+        try {
+          this.createPedestal(room, slot, art, pedGeo, pedMat, plaqueGeo, plaqueTex, modelQueue);
+        } catch (e) {
+          console.error('Pedestal failed for', art && art.title, e);
+        }
+      });
 
       this.scene.add(room);
-    });
+
+      if (this.onProgress) this.onProgress((i + 1) / (total + 1), `Building room ${i + 1} / ${total}…`);
+
+      // ★ Yield so the browser repaints the loading text
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    // Load models through a bounded worker pool
+    if (modelQueue.length) {
+      console.log(`[gallery] loading ${modelQueue.length} models (${CONCURRENT_MODELS} at a time)`);
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(CONCURRENT_MODELS, modelQueue.length) }, async () => {
+        while (cursor < modelQueue.length) {
+          const task = modelQueue[cursor++];
+          try {
+            await this.loadModel(task.group, task.art);
+          } catch (e) {
+            console.error('Model load failed:', task.art && task.art.title, e);
+          }
+          if (this.onProgress) {
+            this.onProgress(0.9 + 0.1 * (cursor / modelQueue.length), 'Loading 3D models…');
+          }
+          // Small yield between parses — parses are synchronous
+          await new Promise(r => setTimeout(r, 0));
+        }
+      });
+      await Promise.all(workers);
+    }
+
+    if (this.onProgress) this.onProgress(1, 'Ready');
   }
 
-  /* Walls with doorway holes + thin architectural door frames */
-  buildWallsWithOpenings(group, entry, H, mat) {
+  buildWalls(group, entry, H, mat) {
     const { W, D, exit } = entry;
     const halfW = W / 2, halfD = D / 2;
     const t = WALL_T;
-    const doorH = 3.0;
-    const doorW = DOOR_W;
+    const doorH = 3.0, doorW = DOOR_W;
 
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0xc9c5bb, roughness: 0.9 });
-    const frameT = 0.12;
-    const frameDepth = t + 0.08;
-
-    /* A segment of plain wall */
-    const addWallSeg = (x0, z0, x1, z1) => {
-      const horizontal = Math.abs(z1 - z0) < 1e-4;
+    const seg = (x0, z0, x1, z1) => {
       const len = Math.hypot(x1 - x0, z1 - z0);
-      if (len < 1e-3) return;
-      const geo = horizontal
+      if (len < 0.01) return;
+      const horiz = Math.abs(z1 - z0) < 1e-4;
+      const geo = horiz
         ? new THREE.BoxGeometry(len, H, t)
         : new THREE.BoxGeometry(t, H, len);
       const m = new THREE.Mesh(geo, mat);
       m.position.set((x0 + x1) / 2, H / 2, (z0 + z1) / 2);
-      m.castShadow = m.receiveShadow = true;
+      m.castShadow = true;
       group.add(m);
     };
 
-    /* Wall with a door hole + frame */
-    const addWallWithDoor = (x0, z0, x1, z1, doorFrac) => {
+    const wallWithDoor = (x0, z0, x1, z1, doorFrac) => {
       const total = Math.hypot(x1 - x0, z1 - z0);
       const dh = (doorW / 2) / total;
       const aF = Math.max(0, doorFrac - dh);
       const bF = Math.min(1, doorFrac + dh);
-
-      addWallSeg(x0, z0, x0 + (x1 - x0) * aF, z0 + (z1 - z0) * aF);
-      addWallSeg(x0 + (x1 - x0) * bF, z0 + (z1 - z0) * bF, x1, z1);
-
-      // Lintel above the doorway
+      seg(x0, z0, x0 + (x1 - x0) * aF, z0 + (z1 - z0) * aF);
+      seg(x0 + (x1 - x0) * bF, z0 + (z1 - z0) * bF, x1, z1);
+      // Lintel
       const cx = x0 + (x1 - x0) * doorFrac;
       const cz = z0 + (z1 - z0) * doorFrac;
-      const horizontal = Math.abs(z1 - z0) < 1e-4;
-      const lintelGeo = horizontal
+      const horiz = Math.abs(z1 - z0) < 1e-4;
+      const lGeo = horiz
         ? new THREE.BoxGeometry(doorW, H - doorH, t)
         : new THREE.BoxGeometry(t, H - doorH, doorW);
-      const lintel = new THREE.Mesh(lintelGeo, mat);
+      const lintel = new THREE.Mesh(lGeo, mat);
       lintel.position.set(cx, doorH + (H - doorH) / 2, cz);
-      lintel.castShadow = lintel.receiveShadow = true;
+      lintel.castShadow = true;
       group.add(lintel);
-
-      // Thin frame: left post, right post, top bar
-      const pA = [x0 + (x1 - x0) * aF, z0 + (z1 - z0) * aF];
-      const pB = [x0 + (x1 - x0) * bF, z0 + (z1 - z0) * bF];
-      const mkFrame = (px, pz, h, offAxis) => {
-        const g = horizontal
-          ? new THREE.BoxGeometry(frameT, h, frameDepth)
-          : new THREE.BoxGeometry(frameDepth, h, frameT);
-        const m = new THREE.Mesh(g, frameMat);
-        m.position.set(px + (offAxis ? 0 : 0), h / 2, pz);
-        m.castShadow = m.receiveShadow = true;
-        group.add(m);
-      };
-      mkFrame(pA[0], pA[1], doorH);
-      mkFrame(pB[0], pB[1], doorH);
-
-      // Top frame bar
-      const topBar = new THREE.Mesh(
-        horizontal
-          ? new THREE.BoxGeometry(doorW + frameT * 2, frameT, frameDepth)
-          : new THREE.BoxGeometry(frameDepth, frameT, doorW + frameT * 2),
-        frameMat
-      );
-      topBar.position.set(cx, doorH, cz);
-      topBar.castShadow = topBar.receiveShadow = true;
-      group.add(topBar);
     };
 
-    // South wall — always has the entrance door (centred)
-    addWallWithDoor(-halfW, halfD, halfW, halfD, 0.5);
+    wallWithDoor(-halfW, halfD, halfW, halfD, 0.5);
 
-    // Exit wall
-    if (exit.side === 'N') {
-      addWallWithDoor(-halfW, -halfD, halfW, -halfD, 0.5 + exit.pos[0] / W);
-    } else if (exit.side === 'W') {
-      addWallWithDoor(-halfW, -halfD, -halfW, halfD, 0.5 + exit.pos[1] / D);
-    } else {
-      addWallWithDoor(halfW, -halfD, halfW, halfD, 0.5 + exit.pos[1] / D);
-    }
+    if (exit.side === 'N')      wallWithDoor(-halfW, -halfD, halfW, -halfD, 0.5 + exit.pos[0] / W);
+    else if (exit.side === 'W') wallWithDoor(-halfW, -halfD, -halfW, halfD, 0.5 + exit.pos[1] / D);
+    else                        wallWithDoor(halfW, -halfD, halfW, halfD, 0.5 + exit.pos[1] / D);
 
-    // Solid remaining walls
-    if (exit.side !== 'N') addWallSeg(-halfW, -halfD, halfW, -halfD);
-    if (exit.side !== 'W') addWallSeg(-halfW, -halfD, -halfW, halfD);
-    if (exit.side !== 'E') addWallSeg(halfW, -halfD, halfW, halfD);
+    if (exit.side !== 'N') seg(-halfW, -halfD, halfW, -halfD);
+    if (exit.side !== 'W') seg(-halfW, -halfD, -halfW, halfD);
+    if (exit.side !== 'E') seg(halfW, -halfD, halfW, halfD);
   }
 
-  /* Floating sign box over an entrance or exit door */
-  createDoorSign(group, entry, H, classCode, className, isEntrance, getSignTex) {
-    const tex = getSignTex ? getSignTex(classCode, className, isEntrance)
-                           : (() => {
-                               const t = new THREE.CanvasTexture(makeSignCanvas(classCode, className, isEntrance));
-                               t.colorSpace = THREE.SRGBColorSpace;
-                               return t;
-                             })();
-    const mat = new THREE.MeshBasicMaterial({ map: tex });
-    const box = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 0.05), mat);
+  createSign(group, entry, code, name, isEntrance, geo, cache) {
+    const key = `${code}-${isEntrance ? 'in' : 'out'}`;
+    if (!cache.has(key)) {
+      const tex = new THREE.CanvasTexture(makeSignCanvas(code, name, isEntrance));
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 2;
+      cache.set(key, tex);
+    }
+    const mat = new THREE.MeshBasicMaterial({ map: cache.get(key) });
+    const sign = new THREE.Mesh(geo, mat);
 
-    const y = 3.65;
     if (isEntrance) {
-      box.position.set(0, y, entry.D / 2 - 0.12);
-      box.rotation.y = Math.PI;
+      sign.position.set(0, 3.65, entry.D / 2 - 0.08);
+      sign.rotation.y = Math.PI;
     } else {
       const ex = entry.exit;
-      if (ex.side === 'N') { box.position.set(ex.pos[0], y, -entry.D / 2 + 0.12); box.rotation.y = 0; }
-      else if (ex.side === 'W') { box.position.set(-entry.W / 2 + 0.12, y, ex.pos[1]); box.rotation.y = Math.PI / 2; }
-      else { box.position.set(entry.W / 2 - 0.12, y, ex.pos[1]); box.rotation.y = -Math.PI / 2; }
+      if (ex.side === 'N') { sign.position.set(ex.pos[0], 3.65, -entry.D / 2 + 0.08); sign.rotation.y = 0; }
+      else if (ex.side === 'W') { sign.position.set(-entry.W / 2 + 0.08, 3.65, ex.pos[1]); sign.rotation.y = Math.PI / 2; }
+      else { sign.position.set(entry.W / 2 - 0.08, 3.65, ex.pos[1]); sign.rotation.y = -Math.PI / 2; }
     }
-    group.add(box);
+    group.add(sign);
   }
 
-  /* Pedestal + artwork + info plaque, all clickable as one group */
-  createPedestalAndArtwork(group, slot, art, getPlaqueTex) {
+  createPedestal(group, slot, art, pedGeo, pedMat, plaqueGeo, plaqueCache, modelQueue) {
     const pedGroup = new THREE.Group();
     pedGroup.position.set(slot.x, 0, slot.z);
     pedGroup.rotation.y = slot.yaw;
     pedGroup.userData = { art };
 
-    const pedMat = new THREE.MeshStandardMaterial({ color: 0xfbfaf7, roughness: 0.8 });
-    const pedestal = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 1.2), pedMat);
+    const pedestal = new THREE.Mesh(pedGeo, pedMat);
     pedestal.position.y = 0.55;
-    pedestal.castShadow = pedestal.receiveShadow = true;
+    pedestal.castShadow = true;
+    pedestal.receiveShadow = true;
     pedGroup.add(pedestal);
 
-    // ★ CHANGED: reuse cached plaque texture
-    const plaqueTex = getPlaqueTex
-      ? getPlaqueTex(art)
-      : (() => { const t = new THREE.CanvasTexture(makePlaqueCanvas(art)); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+    // Plaque texture (cached by item id)
+    const key = art.id || art.title || Math.random().toString(36);
+    if (!plaqueCache.has(key)) {
+      const tex = new THREE.CanvasTexture(makePlaqueCanvas(art));
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 2;
+      plaqueCache.set(key, tex);
+    }
     const plaque = new THREE.Mesh(
-      new THREE.BoxGeometry(1.1, 0.72, 0.04),
-      new THREE.MeshBasicMaterial({ map: plaqueTex })
+      plaqueGeo,
+      new THREE.MeshBasicMaterial({ map: plaqueCache.get(key) })
     );
-    plaque.position.set(0, 0.65, 0.63);
+    plaque.position.set(0, 0.65, 0.61);
     pedGroup.add(plaque);
 
-    const loader = new GLTFLoader();
-    const url = art.modelUrl || 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
-    loader.load(url, gltf => {
-      const model = gltf.scene;
-      model.updateMatrixWorld(true);
-      const box1 = new THREE.Box3().setFromObject(model);
-      const size = new THREE.Vector3(); box1.getSize(size);
-      const maxDim = Math.max(size.x, size.y, size.z);
-      if (maxDim > 0) model.scale.setScalar(1.0 / maxDim);
-      const box2 = new THREE.Box3().setFromObject(model);
-      const center = new THREE.Vector3(); box2.getCenter(center);
-      model.position.set(-center.x, 1.1 - box2.min.y, -center.z);
-      model.traverse(n => { if (n.isMesh) n.castShadow = true; });
-      pedGroup.add(model);
-    }, undefined, err => {
-      console.error('GLB failed', art.title, err);
-      const fallback = new THREE.Mesh(
-        new THREE.SphereGeometry(0.3, 20, 20),
-        new THREE.MeshStandardMaterial({ color: 0x1b1b1a })
-      );
-      fallback.position.y = 1.5;
-      pedGroup.add(fallback);
-    });
-
+    modelQueue.push({ group: pedGroup, art });
     group.add(pedGroup);
   }
 
+  loadModel(group, art) {
+    return new Promise(resolve => {
+      const loader = new GLTFLoader();
+      const url = art.modelUrl || 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
+
+      loader.load(url, gltf => {
+        try {
+          const model = gltf.scene;
+          model.updateMatrixWorld(true);
+
+          const box1 = new THREE.Box3().setFromObject(model);
+          const size = new THREE.Vector3(); box1.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z);
+          if (maxDim > 0) model.scale.setScalar(1.0 / maxDim);
+
+          const box2 = new THREE.Box3().setFromObject(model);
+          const center = new THREE.Vector3(); box2.getCenter(center);
+          model.position.set(-center.x, 1.1 - box2.min.y, -center.z);
+
+          model.traverse(n => { if (n.isMesh) n.castShadow = true; });
+          group.add(model);
+        } catch (e) { console.error(e); }
+        resolve();
+      }, undefined, () => {
+        const fallback = new THREE.Mesh(
+          new THREE.SphereGeometry(0.3, 16, 16),
+          new THREE.MeshLambertMaterial({ color: 0x1b1b1a })
+        );
+        fallback.position.y = 1.5;
+        fallback.castShadow = true;
+        group.add(fallback);
+        resolve();
+      });
+    });
+  }
+
   /* --------------------------------------------------------
-     Class-jump pathfinding
+     Class-jump pathfinding (unchanged from previous version)
      -------------------------------------------------------- */
   computePath(fromIdx, toIdx) {
     const entries = this.plan.entries;
@@ -573,7 +546,6 @@ export class ArchitecturalGallery {
 
     const entranceOf = e => worldOf(e.P, e.yaw, [0, e.D / 2]);
     const exitOf = e => worldOf(e.P, e.yaw, e.exit.pos);
-
     const pts = [this.playerPos.slice()];
 
     if (fromIdx < toIdx) {
@@ -598,49 +570,36 @@ export class ArchitecturalGallery {
     for (let i = 0; i < this.plan.entries.length; i++) {
       const e = this.plan.entries[i];
       const hw = e.W / 2, hd = e.D / 2;
-      const dx = this.playerPos[0] - e.P[0];
-      const dz = this.playerPos[1] - e.P[1];
+      const dx = this.playerPos[0] - e.P[0], dz = this.playerPos[1] - e.P[1];
       const c = Math.cos(-e.yaw), s = Math.sin(-e.yaw);
-      const lx = dx * c + dz * s;
-      const lz = -dx * s + dz * c;
+      const lx = dx * c + dz * s, lz = -dx * s + dz * c;
       if (Math.abs(lx) <= hw + 1 && Math.abs(lz) <= hd + 1) return i;
     }
     return -1;
   }
 
-  /* --------------------------------------------------------
-     Smooth waypoint flight (used by the class-jump dropdown)
-     -------------------------------------------------------- */
   jumpToClass(classIndex) {
     if (this.isTransitioning) return;
-    const targetIdx = this.plan.entries.findIndex(
-      e => e.role === 'main' && e.ci === classIndex
-    );
+    const targetIdx = this.plan.entries.findIndex(e => e.role === 'main' && e.ci === classIndex);
     if (targetIdx < 0) return;
 
     const fromIdx = this.currentEntryIdx;
-    const waypoints = fromIdx >= 0
-      ? this.computePath(fromIdx, targetIdx)
+    const waypoints = fromIdx >= 0 ? this.computePath(fromIdx, targetIdx)
       : [[this.playerPos[0], this.playerPos[1]],
          [this.plan.entries[targetIdx].P[0], this.plan.entries[targetIdx].P[1]]];
-
     if (waypoints.length < 2) return;
 
-    /* Segment lengths for arc-length parametrisation */
     const segLens = [];
     let totalLen = 0;
     for (let i = 1; i < waypoints.length; i++) {
-      const dx = waypoints[i][0] - waypoints[i - 1][0];
-      const dz = waypoints[i][1] - waypoints[i - 1][1];
-      const len = Math.hypot(dx, dz);
-      segLens.push(len);
-      totalLen += len;
+      const len = Math.hypot(waypoints[i][0] - waypoints[i - 1][0], waypoints[i][1] - waypoints[i - 1][1]);
+      segLens.push(len); totalLen += len;
     }
 
     const startYaw = this.playerYaw;
     const targetYaw = this.plan.entries[targetIdx].yaw + Math.PI;
     let dYaw = targetYaw - startYaw;
-    while (dYaw >  Math.PI) dYaw -= 2 * Math.PI;
+    while (dYaw > Math.PI) dYaw -= 2 * Math.PI;
     while (dYaw < -Math.PI) dYaw += 2 * Math.PI;
 
     this.isTransitioning = true;
@@ -654,21 +613,15 @@ export class ArchitecturalGallery {
       const t = Math.min(1, (performance.now() - t0) / duration);
       const eased = t * t * (3 - 2 * t);
       const targetDist = eased * totalLen;
-
       let acc = 0, segIdx = segLens.length - 1;
       for (let i = 0; i < segLens.length; i++) {
         if (acc + segLens[i] >= targetDist) { segIdx = i; break; }
         acc += segLens[i];
       }
       const segT = segLens[segIdx] > 0 ? (targetDist - acc) / segLens[segIdx] : 0;
-      const p0 = waypoints[segIdx];
-      const p1 = waypoints[segIdx + 1] || p0;
-      const px = p0[0] + (p1[0] - p0[0]) * segT;
-      const pz = p0[1] + (p1[1] - p0[1]) * segT;
-
-      this.playerPos = [px, pz];
+      const p0 = waypoints[segIdx], p1 = waypoints[segIdx + 1] || p0;
+      this.playerPos = [p0[0] + (p1[0] - p0[0]) * segT, p0[1] + (p1[1] - p0[1]) * segT];
       this.playerYaw = startYaw + dYaw * eased;
-
       if (t < 1) requestAnimationFrame(step);
       else this.isTransitioning = false;
     };
@@ -676,7 +629,7 @@ export class ArchitecturalGallery {
   }
 
   /* --------------------------------------------------------
-     Seamless pre/post loop
+     Seamless pre/post teleport
      -------------------------------------------------------- */
   checkLoopTeleport() {
     const entries = this.plan.entries;
@@ -687,18 +640,14 @@ export class ArchitecturalGallery {
 
     const inside = e => {
       const hw = e.W / 2, hd = e.D / 2;
-      const dx = this.playerPos[0] - e.P[0];
-      const dz = this.playerPos[1] - e.P[1];
+      const dx = this.playerPos[0] - e.P[0], dz = this.playerPos[1] - e.P[1];
       const c = Math.cos(-e.yaw), s = Math.sin(-e.yaw);
-      const lx = dx * c + dz * s;
-      const lz = -dx * s + dz * c;
+      const lx = dx * c + dz * s, lz = -dx * s + dz * c;
       return Math.abs(lx) <= hw - 0.3 && Math.abs(lz) <= hd - 0.3;
     };
 
     if (inside(pre)) {
-      const lastMain = entries.find(
-        e => e.role === 'main' && e.ci === this.classes.length - 1
-      );
+      const lastMain = entries.find(e => e.role === 'main' && e.ci === this.classes.length - 1);
       if (lastMain) this.teleportBetween(pre, lastMain);
     } else if (inside(post)) {
       const firstMain = entries.find(e => e.role === 'main' && e.ci === 0);
@@ -707,13 +656,10 @@ export class ArchitecturalGallery {
   }
 
   teleportBetween(fromE, toE) {
-    const local = rot(
-      [this.playerPos[0] - fromE.P[0], this.playerPos[1] - fromE.P[1]],
-      -fromE.yaw
-    );
+    const local = rot([this.playerPos[0] - fromE.P[0], this.playerPos[1] - fromE.P[1]], -fromE.yaw);
     const w = rot(local, toE.yaw);
     this.playerPos = [toE.P[0] + w[0], toE.P[1] + w[1]];
-    this.playerYaw = this.playerYaw + (toE.yaw - fromE.yaw);
+    this.playerYaw += (toE.yaw - fromE.yaw);
   }
 
   /* --------------------------------------------------------
@@ -722,25 +668,19 @@ export class ArchitecturalGallery {
   setupControls() {
     this._controller = new AbortController();
     const signal = this._controller.signal;
-
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
 
-    /* Keyboard */
     const moveKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
     window.addEventListener('keydown', e => {
       const k = e.key.toLowerCase();
       if (moveKeys.includes(k)) { this.keys.add(k); e.preventDefault(); }
     }, { signal });
-    window.addEventListener('keyup', e => {
-      this.keys.delete(e.key.toLowerCase());
-    }, { signal });
+    window.addEventListener('keyup', e => this.keys.delete(e.key.toLowerCase()), { signal });
 
-    /* Mouse look */
     this.container.addEventListener('mousedown', e => {
       if (this.isTransitioning) return;
-      this.isDragging = true;
-      this.dragDistance = 0;
+      this.isDragging = true; this.dragDistance = 0;
       this.previousMousePosition = { x: e.clientX, y: e.clientY };
     }, { signal });
     window.addEventListener('mousemove', e => {
@@ -750,15 +690,11 @@ export class ArchitecturalGallery {
       this.playerYaw -= dx * 0.005;
       this.previousMousePosition = { x: e.clientX, y: e.clientY };
     }, { signal });
-    window.addEventListener('mouseup', () => {
-      setTimeout(() => { this.isDragging = false; }, 0);
-    }, { signal });
+    window.addEventListener('mouseup', () => setTimeout(() => { this.isDragging = false; }, 0), { signal });
 
-    /* Touch look */
     this.container.addEventListener('touchstart', e => {
       if (this.isTransitioning || e.touches.length !== 1) return;
-      this.isDragging = true;
-      this.dragDistance = 0;
+      this.isDragging = true; this.dragDistance = 0;
       this.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     }, { signal, passive: true });
     window.addEventListener('touchmove', e => {
@@ -772,7 +708,6 @@ export class ArchitecturalGallery {
     window.addEventListener('touchend', endTouch, { signal });
     window.addEventListener('touchcancel', endTouch, { signal });
 
-    /* Click = raycast against pedestal groups */
     this.container.addEventListener('click', e => {
       if (this.dragDistance > 6 || this.isTransitioning) return;
       const rect = this.renderer.domElement.getBoundingClientRect();
@@ -789,7 +724,7 @@ export class ArchitecturalGallery {
           }
           node = node.parent;
         }
-        break;   // only inspect the closest hit
+        break;
       }
     }, { signal });
   }
@@ -805,10 +740,8 @@ export class ArchitecturalGallery {
 
     const update = e => {
       const r = joy.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      let dx = e.clientX - cx;
-      let dy = e.clientY - cy;
+      let dx = e.clientX - (r.left + r.width / 2);
+      let dy = e.clientY - (r.top + r.height / 2);
       const d = Math.hypot(dx, dy);
       if (d > maxR) { dx = dx / d * maxR; dy = dy / d * maxR; }
       knob.style.transform = `translate(${dx}px, ${dy}px)`;
@@ -825,8 +758,7 @@ export class ArchitecturalGallery {
     }, { signal });
     joy.addEventListener('pointermove', e => {
       if (!this.joystick.active) return;
-      e.preventDefault();
-      update(e);
+      e.preventDefault(); update(e);
     }, { signal });
     const end = () => {
       this.joystick.active = false;
@@ -838,7 +770,7 @@ export class ArchitecturalGallery {
   }
 
   /* --------------------------------------------------------
-     Resize + loop
+     Loop
      -------------------------------------------------------- */
   onWindowResize() {
     if (!this.renderer || !this.camera || !this.container) return;
@@ -849,9 +781,7 @@ export class ArchitecturalGallery {
   }
 
   canWalk(x, z) {
-    for (const r of this.walkRects) {
-      if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return true;
-    }
+    for (const r of this.walkRects) if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return true;
     return false;
   }
 
@@ -859,9 +789,7 @@ export class ArchitecturalGallery {
     if (!this._running || !this.renderer) return;
     requestAnimationFrame(() => this.animate());
 
-    /* Movement input */
-    const sinY = Math.sin(this.playerYaw);
-    const cosY = Math.cos(this.playerYaw);
+    const sinY = Math.sin(this.playerYaw), cosY = Math.cos(this.playerYaw);
     const fwd = [-sinY, -cosY];
     const right = [cosY, -sinY];
     let mx = 0, mz = 0;
@@ -871,32 +799,23 @@ export class ArchitecturalGallery {
       if (this.keys.has('s') || this.keys.has('arrowdown'))  { mx -= fwd[0];   mz -= fwd[1]; }
       if (this.keys.has('a') || this.keys.has('arrowleft'))  { mx -= right[0]; mz -= right[1]; }
       if (this.keys.has('d') || this.keys.has('arrowright')) { mx += right[0]; mz += right[1]; }
-
-      /* Joystick: up = forward */
       if (this.joystick.dx || this.joystick.dy) {
-        const jx = this.joystick.dx;
-        const jy = -this.joystick.dy;
+        const jx = this.joystick.dx, jy = -this.joystick.dy;
         mx += fwd[0] * jy + right[0] * jx;
         mz += fwd[1] * jy + right[1] * jx;
       }
-
       if (mx || mz) {
         const len = Math.hypot(mx, mz);
         const speed = 0.08;
         const nx = this.playerPos[0] + (mx / len) * speed;
         const nz = this.playerPos[1] + (mz / len) * speed;
-        if (this.canWalk(nx, nz)) {
-          this.playerPos = [nx, nz];
-        } else if (this.canWalk(nx, this.playerPos[1])) {
-          this.playerPos = [nx, this.playerPos[1]];
-        } else if (this.canWalk(this.playerPos[0], nz)) {
-          this.playerPos = [this.playerPos[0], nz];
-        }
+        if (this.canWalk(nx, nz)) this.playerPos = [nx, nz];
+        else if (this.canWalk(nx, this.playerPos[1])) this.playerPos = [nx, this.playerPos[1]];
+        else if (this.canWalk(this.playerPos[0], nz)) this.playerPos = [this.playerPos[0], nz];
         this.checkLoopTeleport();
       }
     }
 
-    /* Camera */
     this.camera.position.set(this.playerPos[0], 1.7, this.playerPos[1]);
     this.camera.lookAt(
       this.camera.position.x + fwd[0],
