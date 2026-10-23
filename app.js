@@ -1,22 +1,35 @@
 /* ==========================================================
    AR Art & Design Archive — app logic
    ----------------------------------------------------------
-   Data layout
-   - localStorage  → artwork metadata (title, student, class…) + thumbnail
-   - IndexedDB     → the .glb model files themselves
-     (localStorage is capped at ~5 MB, a single scan is often larger,
-      so the heavy binary goes in IndexedDB. Both are saved in the
-      same submit, so new items show up in the gallery instantly.)
+   Two storage modes, chosen by config.js:
+
+   CLOUD (Supabase URL + key set)
+     - metadata  → Supabase table "artworks"
+     - .glb + thumbnail → Supabase Storage bucket "artworks"
+     Everyone sees the same archive; new uploads appear on all devices.
+
+   LOCAL (config left empty)
+     - metadata  → localStorage
+     - .glb      → IndexedDB
+     Only the current browser sees the uploads.
    ========================================================== */
 (() => {
   'use strict';
 
+  const CFG = Object.assign(
+    { SUPABASE_URL: '', SUPABASE_ANON_KEY: '', SHOW_SAMPLES: true },
+    window.ARCHIVE_CONFIG || {}
+  );
+  const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
+  const SB_URL = (CFG.SUPABASE_URL || '').replace(/\/+$/, '');
+  const BUCKET = 'artworks';
+
   const STORE_KEY = 'arArchive.items.v1';
   const DB_NAME = 'arArchiveFiles';
   const DB_STORE = 'models';
-  const MAX_FILE_MB = 60;
+  const MAX_FILE_MB = CLOUD ? 50 : 60;
 
-  /* ---------- Sample artworks (shown on first load) ---------- */
+  /* ---------- Sample artworks ---------- */
   const MS = 'https://modelviewer.dev/shared-assets/models/';
   const SAMPLE_ITEMS = [
     {
@@ -73,8 +86,8 @@
     }
   ].map((item, i) => ({ ...item, createdAt: Date.now() - (i + 1) * 86400000 }));
 
-  /* ---------- Storage helpers ---------- */
-  function loadItems() {
+  /* ---------- Local storage helpers (LOCAL mode) ---------- */
+  function loadLocalItems() {
     try {
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
@@ -84,12 +97,12 @@
     } catch (e) {
       console.warn('Could not read archive from localStorage', e);
     }
-    // First visit (or unreadable data): seed with samples.
-    saveItems(SAMPLE_ITEMS);
-    return SAMPLE_ITEMS.slice();
+    const seed = CFG.SHOW_SAMPLES ? SAMPLE_ITEMS : [];
+    try { saveLocalItems(seed); } catch (e) { /* ignore */ }
+    return seed.slice();
   }
 
-  function saveItems(items) {
+  function saveLocalItems(items) {
     localStorage.setItem(STORE_KEY, JSON.stringify(items)); // may throw on quota
   }
 
@@ -115,6 +128,67 @@
   const getModel = id => idb('readonly', s => s.get(id));
   const deleteModel = id => idb('readwrite', s => s.delete(id));
 
+  /* ---------- Supabase helpers (CLOUD mode) ---------- */
+  function sbHeaders(extra = {}) {
+    const h = { apikey: CFG.SUPABASE_ANON_KEY, ...extra };
+    // Legacy anon keys are JWTs and may also be sent as a bearer token.
+    // The newer "publishable" keys must only go in the apikey header.
+    if (CFG.SUPABASE_ANON_KEY.startsWith('eyJ')) h.Authorization = 'Bearer ' + CFG.SUPABASE_ANON_KEY;
+    return h;
+  }
+
+  const publicUrl = path => `${SB_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+
+  async function fetchRemoteItems() {
+    const res = await fetch(`${SB_URL}/rest/v1/artworks?select=*&order=created_at.desc`, { headers: sbHeaders() });
+    if (!res.ok) throw new Error(`Could not load the shared archive (${res.status})`);
+    const rows = await res.json();
+    return rows.map(r => ({
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      student: r.student,
+      lecturer: r.lecturer,
+      className: r.class_name,
+      classCode: r.class_code,
+      period: r.period,
+      modelUrl: r.model_url,
+      thumbnail: r.thumbnail_url,
+      createdAt: Date.parse(r.created_at) || 0,
+      remote: true
+    }));
+  }
+
+  // XHR (not fetch) so we can show upload progress on slow mobile connections
+  function xhrUpload(path, blob, contentType, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${SB_URL}/storage/v1/object/${BUCKET}/${path}`);
+      const headers = sbHeaders({ 'Content-Type': contentType, 'x-upsert': 'false', 'cache-control': 'max-age=31536000' });
+      Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+      xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
+        ? resolve()
+        : reject(new Error(`Upload failed (${xhr.status}). ${xhr.responseText || ''}`.slice(0, 200)));
+      xhr.onerror = () => reject(new Error('Network error while uploading. Check your connection and try again.'));
+      xhr.send(blob);
+    });
+  }
+
+  /* ---------- Load everything the gallery should show ---------- */
+  async function loadAll() {
+    if (!CLOUD) return loadLocalItems();
+    let list = [];
+    try {
+      list = await fetchRemoteItems();
+    } catch (e) {
+      console.error(e);
+      toast('Could not reach the shared archive. Showing samples only.');
+    }
+    if (CFG.SHOW_SAMPLES) list = list.concat(SAMPLE_ITEMS);
+    return list;
+  }
+
   /* ---------- Small utilities ---------- */
   const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -138,18 +212,21 @@
     t.textContent = message;
     requestAnimationFrame(() => t.classList.add('show'));
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => t.classList.remove('show'), 3200);
+    toast._t = setTimeout(() => t.classList.remove('show'), 3600);
   }
 
   const norm = s => (s || '').toString().toLowerCase().trim();
   const uniqueSorted = arr => [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const initials = s => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const newId = () => (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 
   /* ==========================================================
      GALLERY PAGE
      ========================================================== */
-  function initGallery() {
-    let items = loadItems();
+  async function initGallery() {
+    let items = [];
     const state = { q: '', code: '', period: '' };
 
     const grid = $('#gallery');
@@ -159,7 +236,6 @@
     const classFilter = $('#classFilter');
     const periodFilter = $('#periodFilter');
 
-    // Newest first
     const sorted = () => items.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
     function fillSelect(select, values, allLabel) {
@@ -180,7 +256,6 @@
       if (state.code && item.classCode !== state.code) return false;
       if (state.period && item.period !== state.period) return false;
       if (state.q) {
-        // Search student name or lecturer (plus title / class name as a bonus)
         const hay = [item.student, item.lecturer, item.title, item.className].map(norm).join(' | ');
         if (!hay.includes(norm(state.q))) return false;
       }
@@ -192,7 +267,7 @@
       thumb.append(el('div', { class: 'placeholder', 'aria-hidden': 'true', text: initials(item.title) }));
       if (item.thumbnail) {
         const img = el('img', { src: item.thumbnail, alt: `Preview of ${item.title}`, loading: 'lazy' });
-        img.addEventListener('error', () => img.remove()); // falls back to placeholder
+        img.addEventListener('error', () => img.remove());
         thumb.append(img);
       }
       thumb.append(el('span', { class: 'badge-ar', text: '3D · AR' }));
@@ -252,9 +327,6 @@
       if (!item) return;
 
       let src = item.modelUrl;
-      // Scene Viewer first: on Android it is Google's native AR viewer and is far
-      // more reliable than in-browser WebXR. iPhones fall through to Quick Look.
-      let arModes = 'scene-viewer webxr quick-look';
 
       if (!src) {
         try {
@@ -262,15 +334,15 @@
           if (!blob) throw new Error('Model file missing');
           activeBlobUrl = URL.createObjectURL(blob);
           src = activeBlobUrl;
-          // Scene Viewer (Android) needs a public https URL, blob URLs only work
-          // with WebXR and iOS Quick Look. Hosted models can use all three.
-          arModes = 'webxr quick-look';
         } catch (e) {
           console.error(e);
           toast('Could not load this model file from the browser.');
           return;
         }
       }
+
+      // Scene Viewer (Android) needs a public https URL, so blob: URLs skip it.
+      const arModes = src.startsWith('blob:') ? 'webxr quick-look' : 'scene-viewer webxr quick-look';
 
       currentId = id;
       lastFocus = document.activeElement;
@@ -282,7 +354,8 @@
       $('#detailLecturer').textContent = item.lecturer;
       $('#detailCode').textContent = item.classCode;
       $('#detailPeriod').textContent = item.period;
-      deleteBtn.hidden = !!item.sample; // samples are protected from deletion
+      // Only locally stored uploads can be deleted from the page
+      deleteBtn.hidden = !!(item.sample || item.remote);
 
       host.replaceChildren();
       const loading = el('div', { class: 'viewer-loading', text: 'Loading 3D model…' });
@@ -327,10 +400,10 @@
 
     deleteBtn.addEventListener('click', async () => {
       const item = items.find(i => i.id === currentId);
-      if (!item || item.sample) return;
+      if (!item || item.sample || item.remote) return;
       if (!confirm(`Delete “${item.title}” from the archive? This can't be undone.`)) return;
       items = items.filter(i => i.id !== item.id);
-      try { saveItems(items); await deleteModel(item.id); } catch (e) { console.warn(e); }
+      try { saveLocalItems(items.filter(i => !i.sample || CFG.SHOW_SAMPLES)); await deleteModel(item.id); } catch (e) { console.warn(e); }
       closeDetail();
       refreshFilterOptions();
       render();
@@ -338,6 +411,8 @@
     });
 
     /* ----- Init ----- */
+    count.textContent = 'Loading archive…';
+    items = await loadAll();
     refreshFilterOptions();
     render();
 
@@ -358,13 +433,22 @@
     const viewer = $('#previewViewer');
     const errorBox = $('#formError');
     const submitBtn = $('#submitBtn');
+    const modeNote = $('#modeNote');
 
     let previewUrl = null;
     let modelReady = false;
 
+    if (modeNote) {
+      modeNote.textContent = CLOUD
+        ? 'Shared archive: your upload will be visible on every device.'
+        : 'This-device mode: uploads are only visible in this browser until the shared archive is set up.';
+    }
+
     // Suggest periods already used in the archive
     const dl = $('#periodSuggestions');
-    uniqueSorted(loadItems().map(i => i.period)).forEach(p => dl.append(el('option', { value: p })));
+    loadAll().then(list => {
+      uniqueSorted(list.map(i => i.period)).forEach(p => dl.append(el('option', { value: p })));
+    }).catch(() => {});
 
     function showError(msg) {
       errorBox.textContent = msg;
@@ -423,7 +507,7 @@
         c.width = Math.round(img.width * scale);
         c.height = Math.round(img.height * scale);
         const ctx = c.getContext('2d');
-        ctx.fillStyle = '#ece8de';           // JPEG has no alpha, so fill the background
+        ctx.fillStyle = '#ece8de';
         ctx.fillRect(0, 0, c.width, c.height);
         ctx.drawImage(img, 0, 0, c.width, c.height);
         return c.toDataURL('image/jpeg', 0.75);
@@ -433,11 +517,68 @@
       }
     }
 
+    async function saveToCloud(file, fields, thumbnail) {
+      const id = newId();
+      const modelPath = `models/${id}.glb`;
+      const thumbPath = `thumbs/${id}.jpg`;
+
+      await xhrUpload(modelPath, file, 'model/gltf-binary', p => {
+        submitBtn.textContent = `Uploading ${Math.round(p * 100)}%`;
+      });
+
+      let thumbnailUrl = '';
+      if (thumbnail) {
+        try {
+          submitBtn.textContent = 'Saving thumbnail…';
+          const thumbBlob = await (await fetch(thumbnail)).blob();
+          await xhrUpload(thumbPath, thumbBlob, 'image/jpeg');
+          thumbnailUrl = publicUrl(thumbPath);
+        } catch (e) {
+          console.warn('Thumbnail upload failed, continuing without it', e);
+        }
+      }
+
+      submitBtn.textContent = 'Publishing…';
+      const res = await fetch(`${SB_URL}/rest/v1/artworks`, {
+        method: 'POST',
+        headers: sbHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
+        body: JSON.stringify({
+          id,
+          title: fields.title,
+          description: fields.description,
+          student: fields.student,
+          lecturer: fields.lecturer,
+          class_name: fields.className,
+          class_code: fields.classCode,
+          period: fields.period,
+          model_url: publicUrl(modelPath),
+          thumbnail_url: thumbnailUrl
+        })
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Could not save the artwork details (${res.status}). ${txt}`.slice(0, 220));
+      }
+    }
+
+    async function saveLocally(file, fields, thumbnail) {
+      const id = 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      await putModel(id, file);
+      const items = loadLocalItems();
+      items.push({ id, ...fields, thumbnail, fileName: file.name, createdAt: Date.now() });
+      try {
+        saveLocalItems(items);
+      } catch (quotaErr) {
+        await deleteModel(id).catch(() => {});
+        throw new Error('Browser storage is full. Delete some uploaded artworks and try again.');
+      }
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    }
+
     form.addEventListener('submit', async e => {
       e.preventDefault();
       showError('');
 
-      // Validate required fields
       let firstBad = null;
       form.querySelectorAll('[required]').forEach(field => {
         const bad = field.type === 'file' ? !field.files.length : !field.value.trim();
@@ -452,42 +593,23 @@
 
       const file = fileInput.files[0];
       const fd = new FormData(form);
-      const id = 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      const fields = {
+        title: fd.get('title').trim(),
+        description: fd.get('description').trim(),
+        student: fd.get('student').trim(),
+        lecturer: fd.get('lecturer').trim(),
+        className: fd.get('className').trim(),
+        classCode: fd.get('classCode').trim().toUpperCase(),
+        period: fd.get('period').trim()
+      };
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Saving…';
+      submitBtn.textContent = 'Preparing…';
 
       try {
         const thumbnail = await captureThumbnail();
-
-        await putModel(id, file);
-
-        const item = {
-          id,
-          title: fd.get('title').trim(),
-          description: fd.get('description').trim(),
-          student: fd.get('student').trim(),
-          lecturer: fd.get('lecturer').trim(),
-          className: fd.get('className').trim(),
-          classCode: fd.get('classCode').trim().toUpperCase(),
-          period: fd.get('period').trim(),
-          thumbnail,
-          fileName: file.name,
-          createdAt: Date.now()
-        };
-
-        const items = loadItems();
-        items.push(item);
-        try {
-          saveItems(items);
-        } catch (quotaErr) {
-          await deleteModel(id).catch(() => {});
-          throw new Error('Browser storage is full. Delete some uploaded artworks and try again.');
-        }
-
-        // Ask the browser not to evict our data under storage pressure
-        if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-
+        if (CLOUD) await saveToCloud(file, fields, thumbnail);
+        else await saveLocally(file, fields, thumbnail);
         location.href = 'index.html?added=1';
       } catch (err) {
         console.error(err);
