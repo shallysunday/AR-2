@@ -1,12 +1,12 @@
 /* ==========================================================
    gallery.js — Three.js renderer for the procedural museum.
-   Builds the all-white architectural model, doors, signs, 
-   pedestals, lighting, and smooth room-jump transitions.
    ========================================================== */
 
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { bestPlan, walkRects, artSlots, groupByClass, DOOR_W, WALL_T, CORR_L } from './gallery-layout.js';
+
+// ... rest of your ArchitecturalGallery class stays exactly the same
 
 export class ArchitecturalGallery {
   constructor(containerEl, onSelectArtwork) {
