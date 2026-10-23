@@ -141,28 +141,34 @@
       btnGrid.classList.add('btn-ghost');
       btnGrid.classList.remove('btn-primary', 'active-tab');
 
-      if (!galleryInstance) {
-        galleryInstance = new ArchitecturalGallery(
-          document.getElementById('canvas-container'),
-          (art) => {
-            console.log("Selected art from 3D gallery:", art);
-          }
-        );
+      // Wait for the browser to render the display: block layout first
+      requestAnimationFrame(() => {
+        if (!galleryInstance) {
+          galleryInstance = new ArchitecturalGallery(
+            document.getElementById('canvas-container'),
+            (art) => {
+              console.log("Selected art from 3D gallery:", art);
+            }
+          );
 
-        setTimeout(() => {
-          if (galleryInstance && galleryInstance.classes) {
-            jumpSelect.replaceChildren(document.createElement('option'));
-            jumpSelect.firstElementChild.value = '';
-            jumpSelect.firstElementChild.textContent = 'Jump to Class Room...';
-            galleryInstance.classes.forEach((cls, idx) => {
-              const opt = document.createElement('option');
-              opt.value = idx;
-              opt.textContent = `${cls.code}: ${cls.name}`;
-              jumpSelect.appendChild(opt);
-            });
-          }
-        }, 300);
-      }
+          setTimeout(() => {
+            if (galleryInstance && galleryInstance.classes) {
+              jumpSelect.replaceChildren(document.createElement('option'));
+              jumpSelect.firstElementChild.value = '';
+              jumpSelect.firstElementChild.textContent = 'Jump to Class Room...';
+              galleryInstance.classes.forEach((cls, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                opt.textContent = `${cls.code}: ${cls.name}`;
+                jumpSelect.appendChild(opt);
+              });
+            }
+          }, 300);
+        } else {
+          // Re-trigger resize if already created
+          galleryInstance.onWindowResize();
+        }
+      });
     });
 
     jumpSelect.addEventListener('change', (e) => {
