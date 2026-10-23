@@ -252,7 +252,9 @@
       if (!item) return;
 
       let src = item.modelUrl;
-      let arModes = 'webxr scene-viewer quick-look';
+      // Scene Viewer first: on Android it is Google's native AR viewer and is far
+      // more reliable than in-browser WebXR. iPhones fall through to Quick Look.
+      let arModes = 'scene-viewer webxr quick-look';
 
       if (!src) {
         try {
