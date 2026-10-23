@@ -141,8 +141,17 @@
     const btnGallery = document.getElementById('btn-gallery-view');
     const jumpSelect = document.getElementById('class-jump-select');
     const loading = document.getElementById('gallery-loading');
+    const loadingText = loading.querySelector('p');
 
     let galleryInstance = null;
+    let safetyTimer = null;
+    let hardTimer = null;
+
+    const clearTimers = () => {
+      clearTimeout(safetyTimer);
+      clearTimeout(hardTimer);
+      safetyTimer = hardTimer = null;
+    };
 
     btnGrid.addEventListener('click', () => {
       gridView.style.display = 'block';
@@ -164,13 +173,31 @@
       btnGrid.classList.add('btn-ghost');
       btnGrid.classList.remove('btn-primary', 'active-tab');
 
-      /* Rebuild fresh so new uploads / deletes are reflected */
       if (galleryInstance) {
         galleryInstance.dispose();
         galleryInstance = null;
       }
 
+      // ★ CHANGED: reset overlay to its initial state
       loading.hidden = false;
+      loading.classList.remove('is-error');
+      loadingText.textContent = 'Loading archive…';
+
+      // ★ NEW: gentle progress text so the user sees progress
+      safetyTimer = setTimeout(() => {
+        if (!loading.hidden) loadingText.textContent = 'Building rooms and pedestals…';
+      }, 1200);
+      setTimeout(() => {
+        if (!loading.hidden) loadingText.textContent = 'Placing 3D models…';
+      }, 2600);
+
+      // ★ NEW: hard safety net — never let the overlay stay forever
+      hardTimer = setTimeout(() => {
+        if (!loading.hidden) {
+          loading.classList.add('is-error');
+          loadingText.textContent = 'The 3D gallery is taking too long. Check your connection and try again.';
+        }
+      }, 20000);
 
       requestAnimationFrame(() => {
         galleryInstance = new ArchitecturalGallery(
@@ -182,27 +209,31 @@
           }
         );
 
-        galleryInstance.onReady = () => {
+        // ★ CHANGED: fires on success OR failure — always clears overlay
+        galleryInstance.onReady = err => {
+          clearTimers();
           loading.hidden = true;
-          jumpSelect.innerHTML = '<option value="">Select a room…</option>';
-          galleryInstance.classes.forEach((cls, idx) => {
-            const opt = document.createElement('option');
-            opt.value = idx;
-            opt.textContent = `${cls.code} — ${cls.name}`;
-            jumpSelect.appendChild(opt);
-          });
+          if (err) console.error('3D gallery build failed:', err);
+          if (galleryInstance.classes && galleryInstance.classes.length) {
+            jumpSelect.innerHTML = '<option value="">Select a room…</option>';
+            galleryInstance.classes.forEach((cls, idx) => {
+              const opt = document.createElement('option');
+              opt.value = idx;
+              opt.textContent = `${cls.code} — ${cls.name}`;
+              jumpSelect.appendChild(opt);
+            });
+          }
         };
       });
     });
 
     jumpSelect.addEventListener('change', e => {
       const idx = parseInt(e.target.value, 10);
-      if (!isNaN(idx) && galleryInstance) {
-        galleryInstance.jumpToClass(idx);
-      }
+      if (!isNaN(idx) && galleryInstance) galleryInstance.jumpToClass(idx);
     });
 
     window.addEventListener('beforeunload', () => {
+      clearTimers();
       if (galleryInstance) galleryInstance.dispose();
     });
   </script>

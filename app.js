@@ -26,6 +26,11 @@
   const BUILD = 'build 4';
   let lastLoadError = '';
 
+  // ★ NEW: cache the loadAll result so the 3D gallery doesn't refetch.
+  let itemsCache = null;
+  let itemsCacheTime = 0;
+  const ITEMS_CACHE_TTL = 30_000;   // 30 s
+
   const STORE_KEY = 'arArchive.items.v1';
   const DB_NAME = 'arArchiveFiles';
   const DB_STORE = 'models';
@@ -141,24 +146,39 @@
 
   const publicUrl = path => `${SB_URL}/storage/v1/object/public/${BUCKET}/${path}`;
 
+    // ★ CHANGED: aborts the fetch after 8 s instead of waiting for the browser
   async function fetchRemoteItems() {
-    const res = await fetch(`${SB_URL}/rest/v1/artworks?select=*&order=created_at.desc`, { headers: sbHeaders() });
-    if (!res.ok) throw new Error(`Could not load the shared archive (${res.status})`);
-    const rows = await res.json();
-    return rows.map(r => ({
-      id: r.id,
-      title: r.title,
-      description: r.description,
-      student: r.student,
-      lecturer: r.lecturer,
-      className: r.class_name,
-      classCode: r.class_code,
-      period: r.period,
-      modelUrl: r.model_url,
-      thumbnail: r.thumbnail_url,
-      createdAt: Date.parse(r.created_at) || 0,
-      remote: true
-    }));
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(
+        `${SB_URL}/rest/v1/artworks?select=*&order=created_at.desc`,
+        { headers: sbHeaders(), signal: controller.signal }
+      );
+      if (!res.ok) throw new Error(`Could not load the shared archive (${res.status})`);
+      const rows = await res.json();
+      return rows.map(r => ({
+        id: r.id,
+        title: r.title,
+        description: r.description,
+        student: r.student,
+        lecturer: r.lecturer,
+        className: r.class_name,
+        classCode: r.class_code,
+        period: r.period,
+        modelUrl: r.model_url,
+        thumbnail: r.thumbnail_url,
+        createdAt: Date.parse(r.created_at) || 0,
+        remote: true
+      }));
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        throw new Error('The shared archive took too long to respond.');
+      }
+      throw e;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   // XHR (not fetch) so we can show upload progress on slow mobile connections
@@ -177,19 +197,28 @@
     });
   }
 
-  /* ---------- Load everything the gallery should show ---------- */
-  async function loadAll() {
-    if (!CLOUD) return loadLocalItems();
-    let list = [];
-    try {
-      list = await fetchRemoteItems();
-      lastLoadError = '';                        // ★ NEW: clear any previous error on success
-    } catch (e) {
-      console.error(e);
-      lastLoadError = e.message || 'unknown error';
-      toast('Could not reach the shared archive. Showing samples only.');
+    // ★ CHANGED: caches the result and accepts forceFresh
+  async function loadAll(forceFresh = false) {
+    if (!forceFresh && itemsCache && Date.now() - itemsCacheTime < ITEMS_CACHE_TTL) {
+      return itemsCache;
     }
-    if (CFG.SHOW_SAMPLES) list = list.concat(SAMPLE_ITEMS);
+    let list;
+    if (!CLOUD) {
+      list = loadLocalItems();
+    } else {
+      try {
+        list = await fetchRemoteItems();
+        lastLoadError = '';
+      } catch (e) {
+        console.error(e);
+        lastLoadError = e.message || 'unknown error';
+        toast('Could not reach the shared archive. Showing samples only.');
+        list = [];
+      }
+      if (CFG.SHOW_SAMPLES) list = list.concat(SAMPLE_ITEMS);
+    }
+    itemsCache = list;
+    itemsCacheTime = Date.now();
     return list;
   }
 

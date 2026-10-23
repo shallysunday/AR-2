@@ -51,7 +51,7 @@ function makeSignCanvas(classCode, className, isEntrance) {
 }
 
 function makePlaqueCanvas(item) {
-  const W = 512, H = 340;
+  const W = 384, H = 256
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
@@ -227,42 +227,66 @@ export class ArchitecturalGallery {
     this.setupControls();
     this.setupJoystick();
     this.animate();
+
+    try {
+      await this.loadDataAndBuild();
+    } catch (e) {
+      console.error('3D gallery build failed', e);
+      // ★ NEW: always fire onReady so the overlay hides
+      if (this.onError) this.onError(e);
+      if (this.onReady) this.onReady(e);
+    }
+
+    window.addEventListener('resize', () => this.onWindowResize());
+    this.setupControls();
+    this.setupJoystick();
+    this.animate();
   }
 
   /* --------------------------------------------------------
      Data
      -------------------------------------------------------- */
   async loadItems() {
-    if (window.arArchive && typeof window.arArchive.loadAll === 'function') {
-      try {
+    const loadPromise = (async () => {
+      if (window.arArchive && typeof window.arArchive.loadAll === 'function') {
         const items = await window.arArchive.loadAll();
-        for (const item of items) {
-          if (!item.modelUrl && window.arArchive.getModel) {
+
+        // ★ CHANGED: parallel IndexedDB lookups instead of one-by-one
+        const pending = items.filter(it => !it.modelUrl && window.arArchive.getModel);
+        if (pending.length) {
+          await Promise.all(pending.map(async it => {
             try {
-              const blob = await window.arArchive.getModel(item.id);
+              const blob = await window.arArchive.getModel(it.id);
               if (blob) {
                 const url = URL.createObjectURL(blob);
                 this._blobUrls.push(url);
-                item.modelUrl = url;
+                it.modelUrl = url;
               }
             } catch (e) {
-              console.warn('Could not load model blob for', item.id, e);
+              console.warn('Could not load model blob for', it.id, e);
             }
-          }
+          }));
         }
         return items;
-      } catch (e) {
-        console.error('arArchive.loadAll failed', e);
       }
-    }
-    let items = [];
-    try {
-      const raw = localStorage.getItem('arArchive.items.v1');
-      if (raw) items = JSON.parse(raw);
-    } catch { /* ignore */ }
+      // Fallback: localStorage
+      try {
+        const raw = localStorage.getItem('arArchive.items.v1');
+        if (raw) return JSON.parse(raw);
+      } catch { /* ignore */ }
+      return [];
+    })();
 
-    if (items.length === 0) {
-      items = [
+    const timeoutPromise = new Promise(res => setTimeout(() => res(null), 6000));
+    const items = await Promise.race([loadPromise, timeoutPromise]);
+
+    if (items === null) {
+      console.warn('Archive load timed out — using samples only');
+    }
+
+    const finalItems = items || [];
+    if (finalItems.length === 0) {
+      return [
         { title: 'Astronaut Study', student: 'Alya Putri', lecturer: 'Dr. Budi Santoso',
           className: 'Typography II', classCode: 'DK202',
           modelUrl: 'https://modelviewer.dev/shared-assets/models/Astronaut.glb' },
@@ -271,7 +295,7 @@ export class ArchitecturalGallery {
           modelUrl: 'https://modelviewer.dev/shared-assets/models/RobotExpressive.glb' }
       ];
     }
-    return items;
+    return finalItems;
   }
 
   async loadDataAndBuild() {
@@ -308,13 +332,36 @@ export class ArchitecturalGallery {
     const ceilMat  = new THREE.MeshStandardMaterial({ color: 0xfbfaf7, roughness: 1.0 });
     const H = 5.0;
 
+    // ★ NEW: texture caches — signTextures are shared between pre/post copies of the same class
+    const signTextures = new Map();      // `${code}-${isEntrance}`
+    const plaqueTextures = new Map();    // item.id
+    const getSignTex = (code, name, isEntrance) => {
+      const key = `${code}-${isEntrance ? 'in' : 'out'}`;
+      if (!signTextures.has(key)) {
+        const tex = new THREE.CanvasTexture(makeSignCanvas(code, name, isEntrance));
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 2;
+        signTextures.set(key, tex);
+      }
+      return signTextures.get(key);
+    };
+    const getPlaqueTex = item => {
+      const key = item.id || item.title || Math.random();
+      if (!plaqueTextures.has(key)) {
+        const tex = new THREE.CanvasTexture(makePlaqueCanvas(item));
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 2;
+        plaqueTextures.set(key, tex);
+      }
+      return plaqueTextures.get(key);
+    };
+
     this.plan.entries.forEach(entry => {
       const { W, D, P, yaw } = entry;
       const room = new THREE.Group();
       room.position.set(P[0], 0, P[1]);
       room.rotation.y = yaw;
 
-      // Floor + ceiling
       const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), floorMat);
       floor.rotation.x = -Math.PI / 2;
       floor.receiveShadow = true;
@@ -325,21 +372,25 @@ export class ArchitecturalGallery {
       ceiling.position.y = H;
       room.add(ceiling);
 
-      // Walls + doorways + door frames
       this.buildWallsWithOpenings(room, entry, H, wallMat);
 
-      // Class signs above entrance + exit doors
       const cls = this.classes[entry.ci];
-      this.createDoorSign(room, entry, H, cls.code, cls.name, true);   // entrance
-      this.createDoorSign(room, entry, H, cls.code, cls.name, false);  // exit
+      if (cls) {
+        this.createDoorSign(room, entry, H, cls.code, cls.name, true, getSignTex);
+        this.createDoorSign(room, entry, H, cls.code, cls.name, false, getSignTex);
 
-      // Pedestals + plaques + art
-      const slots = artSlots(entry, cls.items.length);
-      cls.items.forEach((art, i) => {
-        const slot = slots[i];
-        if (!slot) return;
-        this.createPedestalAndArtwork(room, slot, art);
-      });
+        const slots = artSlots(entry, cls.items.length);
+        cls.items.forEach((art, i) => {
+          const slot = slots[i];
+          if (!slot) return;
+          try {
+            this.createPedestalAndArtwork(room, slot, art, getPlaqueTex);
+          } catch (err) {
+            // ★ NEW: one bad artwork never kills the whole build
+            console.error('Pedestal for', art && art.title, 'failed:', err);
+          }
+        });
+      }
 
       this.scene.add(room);
     });
@@ -439,58 +490,46 @@ export class ArchitecturalGallery {
   }
 
   /* Floating sign box over an entrance or exit door */
-  createDoorSign(group, entry, H, classCode, className, isEntrance) {
-    const canvas = makeSignCanvas(classCode, className, isEntrance);
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
-
-    const signW = 3.2, signH = 0.8, signD = 0.05;
+  createDoorSign(group, entry, H, classCode, className, isEntrance, getSignTex) {
+    const tex = getSignTex ? getSignTex(classCode, className, isEntrance)
+                           : (() => {
+                               const t = new THREE.CanvasTexture(makeSignCanvas(classCode, className, isEntrance));
+                               t.colorSpace = THREE.SRGBColorSpace;
+                               return t;
+                             })();
     const mat = new THREE.MeshBasicMaterial({ map: tex });
-    const box = new THREE.Mesh(new THREE.BoxGeometry(signW, signH, signD), mat);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 0.05), mat);
 
     const y = 3.65;
     if (isEntrance) {
-      // Over the south wall entrance, facing into the room (-Z)
       box.position.set(0, y, entry.D / 2 - 0.12);
       box.rotation.y = Math.PI;
     } else {
       const ex = entry.exit;
-      if (ex.side === 'N') {
-        box.position.set(ex.pos[0], y, -entry.D / 2 + 0.12);
-        box.rotation.y = 0;
-      } else if (ex.side === 'W') {
-        box.position.set(-entry.W / 2 + 0.12, y, ex.pos[1]);
-        box.rotation.y = Math.PI / 2;
-      } else {
-        box.position.set(entry.W / 2 - 0.12, y, ex.pos[1]);
-        box.rotation.y = -Math.PI / 2;
-      }
+      if (ex.side === 'N') { box.position.set(ex.pos[0], y, -entry.D / 2 + 0.12); box.rotation.y = 0; }
+      else if (ex.side === 'W') { box.position.set(-entry.W / 2 + 0.12, y, ex.pos[1]); box.rotation.y = Math.PI / 2; }
+      else { box.position.set(entry.W / 2 - 0.12, y, ex.pos[1]); box.rotation.y = -Math.PI / 2; }
     }
-
     group.add(box);
   }
 
   /* Pedestal + artwork + info plaque, all clickable as one group */
-  createPedestalAndArtwork(group, slot, art) {
+  createPedestalAndArtwork(group, slot, art, getPlaqueTex) {
     const pedGroup = new THREE.Group();
     pedGroup.position.set(slot.x, 0, slot.z);
     pedGroup.rotation.y = slot.yaw;
     pedGroup.userData = { art };
 
-    // Pedestal (bigger — 1.2 × 1.1 × 1.2)
     const pedMat = new THREE.MeshStandardMaterial({ color: 0xfbfaf7, roughness: 0.8 });
     const pedestal = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 1.2), pedMat);
     pedestal.position.y = 0.55;
     pedestal.castShadow = pedestal.receiveShadow = true;
     pedGroup.add(pedestal);
 
-    // Plaque — flush on the pedestal front face
-    const plaqueCanvas = makePlaqueCanvas(art);
-    const plaqueTex = new THREE.CanvasTexture(plaqueCanvas);
-    plaqueTex.colorSpace = THREE.SRGBColorSpace;
-    plaqueTex.anisotropy = 4;
-
+    // ★ CHANGED: reuse cached plaque texture
+    const plaqueTex = getPlaqueTex
+      ? getPlaqueTex(art)
+      : (() => { const t = new THREE.CanvasTexture(makePlaqueCanvas(art)); t.colorSpace = THREE.SRGBColorSpace; return t; })();
     const plaque = new THREE.Mesh(
       new THREE.BoxGeometry(1.1, 0.72, 0.04),
       new THREE.MeshBasicMaterial({ map: plaqueTex })
@@ -498,25 +537,18 @@ export class ArchitecturalGallery {
     plaque.position.set(0, 0.65, 0.63);
     pedGroup.add(plaque);
 
-    // Load the .glb, normalise, sit it on top
     const loader = new GLTFLoader();
     const url = art.modelUrl || 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
-
     loader.load(url, gltf => {
       const model = gltf.scene;
       model.updateMatrixWorld(true);
-
       const box1 = new THREE.Box3().setFromObject(model);
-      const size = new THREE.Vector3();
-      box1.getSize(size);
+      const size = new THREE.Vector3(); box1.getSize(size);
       const maxDim = Math.max(size.x, size.y, size.z);
       if (maxDim > 0) model.scale.setScalar(1.0 / maxDim);
-
       const box2 = new THREE.Box3().setFromObject(model);
-      const center = new THREE.Vector3();
-      box2.getCenter(center);
+      const center = new THREE.Vector3(); box2.getCenter(center);
       model.position.set(-center.x, 1.1 - box2.min.y, -center.z);
-
       model.traverse(n => { if (n.isMesh) n.castShadow = true; });
       pedGroup.add(model);
     }, undefined, err => {

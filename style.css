@@ -507,3 +507,20 @@ body.view-3d .site-footer {
   }
   .hud-instruction { font-size: 11px; }
 }
+
+/* Error state for the loading overlay */
+.gallery-loading.is-error {
+  background: rgba(253, 241, 240, 0.94);
+  color: var(--danger);
+}
+.gallery-loading.is-error .spinner {
+  border-color: #f0cbc8;
+  border-top-color: var(--danger);
+  animation-duration: 2s;
+}
+.gallery-loading p {
+  max-width: 320px;
+  text-align: center;
+  line-height: 1.45;
+  padding: 0 20px;
+}
