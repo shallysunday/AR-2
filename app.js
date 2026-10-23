@@ -23,7 +23,7 @@
   const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
   const SB_URL = (CFG.SUPABASE_URL || '').replace(/\/+$/, '');
   const BUCKET = 'artworks';
-  const BUILD = 'build 3';
+  const BUILD = 'build 4';
   let lastLoadError = '';
 
   const STORE_KEY = 'arArchive.items.v1';
@@ -425,8 +425,11 @@
     render();
 
     const params = new URLSearchParams(location.search);
-    if (params.get('added')) {
-      toast('Artwork added to the archive ✓');
+    const added = params.get('added');
+    if (added) {
+      toast(added === 'shared' ? 'Saved to the SHARED archive ✓'
+        : added === 'local' ? 'Saved on THIS DEVICE only (shared mode is off)'
+        : 'Added to the archive (old upload page: not saved to Supabase)');
       history.replaceState(null, '', location.pathname);
     }
   }
@@ -447,9 +450,9 @@
     let modelReady = false;
 
     if (modeNote) {
-      modeNote.textContent = CLOUD
+      modeNote.textContent = `${BUILD} · ` + (CLOUD
         ? 'Shared archive: your upload will be visible on every device.'
-        : 'This-device mode: uploads are only visible in this browser until the shared archive is set up.';
+        : 'This-device mode: uploads are only visible in this browser until the shared archive is set up.');
     }
 
     // Suggest periods already used in the archive
@@ -625,7 +628,7 @@
         const thumbnail = await captureThumbnail();
         if (CLOUD) await saveToCloud(file, fields, thumbnail);
         else await saveLocally(file, fields, thumbnail);
-        location.href = 'index.html?added=1';
+        location.href = `index.html?added=${CLOUD ? 'shared' : 'local'}`;
       } catch (err) {
         console.error(err);
         showError(err.message || 'Something went wrong while saving. Please try again.');
