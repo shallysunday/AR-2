@@ -38,11 +38,13 @@
 
   /* ---------- Sample artworks ---------- */
   const MS = 'https://modelviewer.dev/shared-assets/models/';
+  // Demo records use public sample GLB models. Replace them with student work
+  // when real project models are available.
   const SAMPLE_ITEMS = [
     {
-      id: 'sample-astronaut',
-      title: 'Astronaut Study',
-      description: 'A figure study exploring volume and silhouette in zero gravity. Scanned from a clay maquette and cleaned up in post.',
+      id: 'sample-nm-astronaut',
+      title: 'Orbit: Figure Study',
+      description: 'A digital sculpture study exploring volume, silhouette, and the human figure in an imagined zero-gravity environment.',
       student: 'Alya Putri',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
       className: 'New Media',
@@ -53,9 +55,9 @@
       sample: true
     },
     {
-      id: 'sample-robot',
-      title: 'Expressive Robot',
-      description: 'Character design project: a friendly service robot with exaggerated gestures and a limited colour palette.',
+      id: 'sample-nm-robot',
+      title: 'Friendly Machine',
+      description: 'A character-design experiment exploring expression, gesture, and the personality of a digital object.',
       student: 'Rizky Pratama',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
       className: 'New Media',
@@ -66,9 +68,9 @@
       sample: true
     },
     {
-      id: 'sample-neil',
+      id: 'sample-nm-lunar',
       title: 'Lunar Portrait',
-      description: 'A commemorative portrait piece looking at how monuments translate into digital archives.',
+      description: 'A portrait study considering how a three-dimensional figure can become an interactive digital archive object.',
       student: 'Dimas Wicaksono',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
       className: 'New Media',
@@ -79,42 +81,120 @@
       sample: true
     },
     {
-      id: 'sample-robot',
-      title: 'Expressive Robot',
-      description: 'Character design project: a friendly service robot with exaggerated gestures and a limited colour palette.',
-      student: 'Rizky Pratama',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Character Design I',
-      classCode: 'DK115',
+      id: 'sample-nm-fox',
+      title: 'Digital Creature',
+      description: 'A playful study of character, material, and movement in a real-time 3D scene.',
+      student: 'Siti Maharani',
+      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
+      className: 'New Media',
+      classCode: 'NM101',
       period: 'Odd 2026/2027',
-      modelUrl: MS + 'RobotExpressive.glb',
-      thumbnail: MS + 'RobotExpressive.png',
+      modelUrl: MS + 'Fox.glb',
+      thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-horse',
+      id: 'sample-typo-bottle',
+      title: 'Everyday Form',
+      description: 'A form-and-label study using a familiar object as a starting point for visual communication experiments.',
+      student: 'Nabila Zahra',
+      lecturer: 'Maya Anggraini, M.Ds.',
+      className: 'Typography',
+      classCode: 'TP201',
+      period: 'Odd 2026/2027',
+      modelUrl: MS + 'WaterBottle.glb',
+      thumbnail: '',
+      sample: true
+    },
+    {
+      id: 'sample-typo-boombox',
+      title: 'Sound & Letter',
+      description: 'A visual rhythm study exploring the relationship between sound culture, shape, and graphic identity.',
+      student: 'Fajar Nugroho',
+      lecturer: 'Maya Anggraini, M.Ds.',
+      className: 'Typography',
+      classCode: 'TP201',
+      period: 'Odd 2026/2027',
+      modelUrl: MS + 'BoomBox.glb',
+      thumbnail: '',
+      sample: true
+    },
+    {
+      id: 'sample-typo-shoe',
+      title: 'Type in Motion',
+      description: 'A concept study about movement, pace, and expressive visual language in a three-dimensional presentation.',
+      student: 'Putri Lestari',
+      lecturer: 'Maya Anggraini, M.Ds.',
+      className: 'Typography',
+      classCode: 'TP201',
+      period: 'Odd 2026/2027',
+      modelUrl: MS + 'Shoe.glb',
+      thumbnail: '',
+      sample: true
+    },
+    {
+      id: 'sample-typo-duck',
+      title: 'Soft Characters',
+      description: 'An exploratory form study for a friendly visual identity with rounded shapes and a memorable silhouette.',
+      student: 'Kevin Saputra',
+      lecturer: 'Maya Anggraini, M.Ds.',
+      className: 'Typography',
+      classCode: 'TP201',
+      period: 'Odd 2026/2027',
+      modelUrl: MS + 'Duck.glb',
+      thumbnail: '',
+      sample: true
+    },
+    {
+      id: 'sample-tri-horse',
       title: 'Horse in Motion',
-      description: 'Sculptural study of movement, inspired by early motion photography and kinetic art.',
+      description: 'A sculptural study of movement, balance, and volume inspired by kinetic art.',
       student: 'Nadia Rahma',
       lecturer: 'Dr. Budi Santoso',
-      className: 'Form & Space',
-      classCode: 'DK108',
-      period: 'Even 2025/2026',
+      className: 'Trimatra',
+      classCode: 'TR301',
+      period: 'Odd 2026/2027',
       modelUrl: MS + 'Horse.glb',
       thumbnail: MS + 'Horse.png',
       sample: true
     },
     {
-      id: 'sample-neil',
-      title: 'Lunar Portrait',
-      description: 'A commemorative portrait piece looking at how monuments translate into digital archives.',
-      student: 'Dimas Wicaksono',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Digital Archive Studio',
-      classCode: 'DK310',
-      period: 'Odd 2025/2026',
-      modelUrl: MS + 'NeilArmstrong.glb',
-      thumbnail: MS + 'NeilArmstrong.png',
+      id: 'sample-tri-chair',
+      title: 'Object and Space',
+      description: 'A three-dimensional study of proportion, structure, and the relationship between object and space.',
+      student: 'Bagas Firmansyah',
+      lecturer: 'Dr. Budi Santoso',
+      className: 'Trimatra',
+      classCode: 'TR301',
+      period: 'Odd 2026/2027',
+      modelUrl: MS + 'Chair.glb',
+      thumbnail: '',
+      sample: true
+    },
+    {
+      id: 'sample-tri-helmet',
+      title: 'Surface Study',
+      description: 'A study of hard surfaces, highlights, and the way light describes volume.',
+      student: 'Intan Permata',
+      lecturer: 'Dr. Budi Santoso',
+      className: 'Trimatra',
+      classCode: 'TR301',
+      period: 'Odd 2026/2027',
+      modelUrl: MS + 'DamagedHelmet.glb',
+      thumbnail: '',
+      sample: true
+    },
+    {
+      id: 'sample-tri-astronaut',
+      title: 'Figure in Space',
+      description: 'A three-dimensional figure study focused on silhouette, scale, and spatial presence.',
+      student: 'Dewi Anggraini',
+      lecturer: 'Dr. Budi Santoso',
+      className: 'Trimatra',
+      classCode: 'TR301',
+      period: 'Odd 2026/2027',
+      modelUrl: MS + 'Astronaut.glb',
+      thumbnail: MS + 'Astronaut.png',
       sample: true
     }
   ].map((item, i) => ({ ...item, createdAt: Date.now() - (i + 1) * 86400000 }));
@@ -125,7 +205,15 @@
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          // Refresh demo entries after a code update, but keep real user uploads.
+          const userItems = parsed.filter(item => !item.sample);
+          const refreshed = CFG.SHOW_SAMPLES
+            ? userItems.concat(SAMPLE_ITEMS)
+            : userItems;
+          try { saveLocalItems(refreshed); } catch (e) { /* keep usable in memory */ }
+          return refreshed;
+        }
       }
     } catch (e) {
       console.warn('Could not read archive from localStorage', e);
