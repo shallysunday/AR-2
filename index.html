@@ -37,7 +37,6 @@
     </div>
   </header>
 
-  <!-- VIEW 1: Traditional Search & Filter Grid -->
   <main id="grid-view-container" class="container">
     <section class="controls" aria-label="Search and filters">
       <div class="field field-search">
@@ -66,10 +65,8 @@
     </div>
   </main>
 
-  <!-- VIEW 2: Immersive 3D Gallery -->
   <section id="gallery-view-container" style="display: none;">
 
-    <!-- HUD -->
     <div class="gallery-hud">
       <div class="hud-row">
         <span class="hud-instruction">
@@ -84,16 +81,13 @@
       </div>
     </div>
 
-    <!-- Loading overlay -->
     <div id="gallery-loading" class="gallery-loading">
       <div class="spinner" aria-hidden="true"></div>
       <p>Building museum…</p>
     </div>
 
-    <!-- 3D canvas host -->
     <div id="canvas-container"></div>
 
-    <!-- Touch joystick (mobile) -->
     <div id="joystick" class="joystick" aria-hidden="true">
       <div class="joystick-knob"></div>
     </div>
@@ -105,7 +99,6 @@
     </div>
   </footer>
 
-  <!-- Detail modal -->
   <div id="detailModal" class="modal" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
@@ -144,13 +137,11 @@
     const loadingText = loading.querySelector('p');
 
     let galleryInstance = null;
-    let safetyTimer = null;
     let hardTimer = null;
 
     const clearTimers = () => {
-      clearTimeout(safetyTimer);
       clearTimeout(hardTimer);
-      safetyTimer = hardTimer = null;
+      hardTimer = null;
     };
 
     btnGrid.addEventListener('click', () => {
@@ -178,26 +169,25 @@
         galleryInstance = null;
       }
 
-      // ★ CHANGED: reset overlay to its initial state
       loading.hidden = false;
       loading.classList.remove('is-error');
       loadingText.textContent = 'Loading archive…';
 
-      // ★ NEW: gentle progress text so the user sees progress
-      safetyTimer = setTimeout(() => {
-        if (!loading.hidden) loadingText.textContent = 'Building rooms and pedestals…';
-      }, 1200);
+      // Only one fallback text, and it cannot overwrite real progress.
+      let progressStarted = false;
       setTimeout(() => {
-        if (!loading.hidden) loadingText.textContent = 'Placing 3D models…';
-      }, 2600);
+        if (!loading.hidden && !progressStarted) {
+          loadingText.textContent = 'Preparing gallery…';
+        }
+      }, 1500);
 
-      // ★ NEW: hard safety net — never let the overlay stay forever
+      // Hard safety net — never leave the overlay up longer than 15 s.
       hardTimer = setTimeout(() => {
         if (!loading.hidden) {
           loading.classList.add('is-error');
-          loadingText.textContent = 'The 3D gallery is taking too long. Check your connection and try again.';
+          loadingText.textContent = 'The 3D gallery is taking too long. Please try again.';
         }
-      }, 20000);
+      }, 15000);
 
       requestAnimationFrame(() => {
         galleryInstance = new ArchitecturalGallery(
@@ -209,8 +199,8 @@
           }
         );
 
-        // ★ CHANGED: real progress + early overlay hide
         galleryInstance.onProgress = (frac, text) => {
+          progressStarted = true;
           if (loading.hidden) return;
           loadingText.textContent = text || `${Math.round(frac * 100)}%`;
         };

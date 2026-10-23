@@ -3,13 +3,13 @@
    Optimised for smooth first paint on desktop + mobile.
 
    Key perf choices:
-   - MeshLambertMaterial (not Standard) for walls/floor/pedestals
-   - MeshBasicMaterial for signs + plaques (no lighting needed)
-   - 1024² shadow map (not 2048²), frustum sized from the layout
-   - Walls castShadow but DON'T receiveShadow (halves shadow work)
+   - MeshLambertMaterial for walls/floor/pedestals
+   - MeshBasicMaterial for signs + plaques
+   - 1024² shadow map, frustum sized from the layout
+   - Walls castShadow but DON'T receiveShadow
    - Builds rooms one at a time and yields between each
-   - Models load through a concurrency-limited queue (3 at a time)
-   - Serialised GLTF parses so the main thread stays responsive
+   - Models load FIRE-AND-FORGET (never blocks the loading screen)
+   - 12 s hard cap per model — a slow .glb can't hang the build
    ========================================================== */
 
 import * as THREE from 'three';
@@ -19,7 +19,6 @@ import {
   worldOf, rot, DOOR_W, WALL_T, CORR_L
 } from './gallery-layout.js';
 
-/* Sanity caps — the 3D view is a preview, not a spec sheet */
 const MAX_ARTWORKS_3D   = 80;
 const CONCURRENT_MODELS = 3;
 const PLAQUE_W = 1.1, PLAQUE_H = 0.72;
@@ -51,7 +50,7 @@ function makeSignCanvas(classCode, className, isEntrance) {
 }
 
 function makePlaqueCanvas(item) {
-  const W = 384, H = 256;              // smaller than before
+  const W = 384, H = 256;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
@@ -146,6 +145,7 @@ export class ArchitecturalGallery {
     this._controller = null;
     this._blobUrls = [];
     this.isTransitioning = false;
+    this._generation = 0;
   }
 
   async init() {
@@ -166,7 +166,6 @@ export class ArchitecturalGallery {
     this.renderer.toneMappingExposure = 1.1;
     this.container.appendChild(this.renderer.domElement);
 
-    /* Lighting — kept minimal for perf */
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0xdddddd, 0.55));
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 
@@ -175,7 +174,6 @@ export class ArchitecturalGallery {
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
     key.shadow.bias = -0.0005;
-    // Frustum is set once the layout is known (in loadDataAndBuild)
     key.shadow.camera.far = 300;
     this.scene.add(key);
     this.keyLight = key;
@@ -259,14 +257,12 @@ export class ArchitecturalGallery {
     this.walkRects = walkRects(this.plan);
     console.log(`[gallery] layout: ${this.plan.entries.length} rooms in ${(performance.now() - t1).toFixed(0)}ms`);
 
-    // Size shadow frustum to fit the whole museum
     this.fitShadowCamera();
 
     const t2 = performance.now();
     await this.buildMuseumGeometry();
     console.log(`[gallery] geometry built in ${(performance.now() - t2).toFixed(0)}ms`);
 
-    // Spawn at the entrance of the first main room
     const r0 = this.plan.entries.find(e => e.role === 'main' && e.ci === 0);
     if (r0) {
       this.playerPos = [r0.P[0], r0.P[1] + r0.D / 2 - 2.5];
@@ -292,7 +288,6 @@ export class ArchitecturalGallery {
     cam.top = span / 2;
     cam.bottom = -span / 2;
     cam.updateProjectionMatrix();
-    // Keep the light above the centre of the museum
     this.keyLight.position.set(cx + 24, 40, cz + 22);
     this.keyLight.target.position.set(cx, 0, cz);
     this.scene.add(this.keyLight.target);
@@ -305,13 +300,12 @@ export class ArchitecturalGallery {
   }
 
   /* --------------------------------------------------------
-     Geometry — builds one room per frame, yields between each
+     Geometry — builds rooms then fire-and-forgets model loads
      -------------------------------------------------------- */
   async buildMuseumGeometry() {
     const H = 5.0;
     const total = this.plan.entries.length;
 
-    // Shared materials — created once, reused across every room
     const wallMat  = new THREE.MeshLambertMaterial({ color: 0xffffff });
     const floorMat = new THREE.MeshLambertMaterial({ color: 0xe9e7e2 });
     const ceilMat  = new THREE.MeshLambertMaterial({ color: 0xfbfaf7 });
@@ -320,11 +314,9 @@ export class ArchitecturalGallery {
     const signGeo   = new THREE.PlaneGeometry(3.2, 0.8);
     const pedGeo    = new THREE.BoxGeometry(1.2, 1.1, 1.2);
 
-    // Shared textures — pre/post copies of the same class reuse these
-    const signTex  = new Map();   // `${code}-in|out`
-    const plaqueTex = new Map();  // item.id
-
-    const modelQueue = [];   // { group, art } — loaded AFTER rooms are built
+    const signTex  = new Map();
+    const plaqueTex = new Map();
+    const modelQueue = [];
 
     for (let i = 0; i < total; i++) {
       const entry = this.plan.entries[i];
@@ -335,7 +327,6 @@ export class ArchitecturalGallery {
       room.position.set(entry.P[0], 0, entry.P[1]);
       room.rotation.y = entry.yaw;
 
-      // Floor + ceiling (skip ceiling cast/receive)
       const floor = new THREE.Mesh(new THREE.PlaneGeometry(entry.W, entry.D), floorMat);
       floor.rotation.x = -Math.PI / 2;
       floor.receiveShadow = true;
@@ -348,11 +339,9 @@ export class ArchitecturalGallery {
 
       this.buildWalls(room, entry, H, wallMat);
 
-      // Class signs
       this.createSign(room, entry, cls.code, cls.name, true,  signGeo, signTex);
       this.createSign(room, entry, cls.code, cls.name, false, signGeo, signTex);
 
-      // Pedestals + plaques (models queued)
       const slots = artSlots(entry, cls.items.length);
       cls.items.forEach((art, idx) => {
         const slot = slots[idx];
@@ -368,33 +357,59 @@ export class ArchitecturalGallery {
 
       if (this.onProgress) this.onProgress((i + 1) / (total + 1), `Building room ${i + 1} / ${total}…`);
 
-      // ★ Yield so the browser repaints the loading text
       await new Promise(r => setTimeout(r, 0));
     }
 
-    // Load models through a bounded worker pool
+    // Fire-and-forget model loading — never blocks the loading screen
     if (modelQueue.length) {
-      console.log(`[gallery] loading ${modelQueue.length} models (${CONCURRENT_MODELS} at a time)`);
-      let cursor = 0;
-      const workers = Array.from({ length: Math.min(CONCURRENT_MODELS, modelQueue.length) }, async () => {
-        while (cursor < modelQueue.length) {
-          const task = modelQueue[cursor++];
-          try {
-            await this.loadModel(task.group, task.art);
-          } catch (e) {
-            console.error('Model load failed:', task.art && task.art.title, e);
-          }
-          if (this.onProgress) {
-            this.onProgress(0.9 + 0.1 * (cursor / modelQueue.length), 'Loading 3D models…');
-          }
-          // Small yield between parses — parses are synchronous
-          await new Promise(r => setTimeout(r, 0));
-        }
-      });
-      await Promise.all(workers);
+      console.log(`[gallery] queuing ${modelQueue.length} models (loading in background)`);
+      this._loadModelsInBackground(modelQueue);
     }
 
     if (this.onProgress) this.onProgress(1, 'Ready');
+  }
+
+  /* Background model loader — doesn't block onReady() */
+  _loadModelsInBackground(queue) {
+    const gen = this._generation;
+    let cursor = 0;
+
+    const worker = async () => {
+      while (cursor < queue.length) {
+        if (this._generation !== gen) return;
+        const task = queue[cursor++];
+
+        let ok = false;
+        try {
+          ok = await Promise.race([
+            this.loadModel(task.group, task.art),
+            new Promise(resolve => setTimeout(() => resolve(false), 12000))
+          ]);
+        } catch (e) {
+          console.warn('[gallery] model error:', task.art && task.art.title, e);
+        }
+
+        if (this._generation !== gen) return;
+        if (!ok) this._addFallback(task.group);
+
+        await new Promise(r => setTimeout(r, 0));
+      }
+    };
+
+    const n = Math.min(CONCURRENT_MODELS, queue.length);
+    for (let i = 0; i < n; i++) worker();
+  }
+
+  _addFallback(group) {
+    if (group.userData._hasFallback) return;
+    group.userData._hasFallback = true;
+    const fallback = new THREE.Mesh(
+      new THREE.SphereGeometry(0.3, 16, 16),
+      new THREE.MeshLambertMaterial({ color: 0x1b1b1a })
+    );
+    fallback.position.y = 1.5;
+    fallback.castShadow = true;
+    group.add(fallback);
   }
 
   buildWalls(group, entry, H, mat) {
@@ -423,7 +438,6 @@ export class ArchitecturalGallery {
       const bF = Math.min(1, doorFrac + dh);
       seg(x0, z0, x0 + (x1 - x0) * aF, z0 + (z1 - z0) * aF);
       seg(x0 + (x1 - x0) * bF, z0 + (z1 - z0) * bF, x1, z1);
-      // Lintel
       const cx = x0 + (x1 - x0) * doorFrac;
       const cz = z0 + (z1 - z0) * doorFrac;
       const horiz = Math.abs(z1 - z0) < 1e-4;
@@ -482,7 +496,6 @@ export class ArchitecturalGallery {
     pedestal.receiveShadow = true;
     pedGroup.add(pedestal);
 
-    // Plaque texture (cached by item id)
     const key = art.id || art.title || Math.random().toString(36);
     if (!plaqueCache.has(key)) {
       const tex = new THREE.CanvasTexture(makePlaqueCanvas(art));
@@ -501,12 +514,15 @@ export class ArchitecturalGallery {
     group.add(pedGroup);
   }
 
+  /* Resolves true on success, false on failure/timeout */
   loadModel(group, art) {
+    const gen = this._generation;
     return new Promise(resolve => {
       const loader = new GLTFLoader();
       const url = art.modelUrl || 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
 
       loader.load(url, gltf => {
+        if (this._generation !== gen) { resolve(false); return; }
         try {
           const model = gltf.scene;
           model.updateMatrixWorld(true);
@@ -522,23 +538,17 @@ export class ArchitecturalGallery {
 
           model.traverse(n => { if (n.isMesh) n.castShadow = true; });
           group.add(model);
-        } catch (e) { console.error(e); }
-        resolve();
-      }, undefined, () => {
-        const fallback = new THREE.Mesh(
-          new THREE.SphereGeometry(0.3, 16, 16),
-          new THREE.MeshLambertMaterial({ color: 0x1b1b1a })
-        );
-        fallback.position.y = 1.5;
-        fallback.castShadow = true;
-        group.add(fallback);
-        resolve();
-      });
+          resolve(true);
+        } catch (e) {
+          console.error('[gallery] post-process failed:', e);
+          resolve(false);
+        }
+      }, undefined, () => resolve(false));
     });
   }
 
   /* --------------------------------------------------------
-     Class-jump pathfinding (unchanged from previous version)
+     Class-jump pathfinding
      -------------------------------------------------------- */
   computePath(fromIdx, toIdx) {
     const entries = this.plan.entries;
@@ -830,6 +840,7 @@ export class ArchitecturalGallery {
   resume() { if (this._running) return; this._running = true; this.animate(); }
 
   dispose() {
+    this._generation++;
     this._running = false;
     if (this._controller) { this._controller.abort(); this._controller = null; }
     this._blobUrls.forEach(u => URL.revokeObjectURL(u));
