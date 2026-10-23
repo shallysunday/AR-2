@@ -23,6 +23,8 @@
   const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
   const SB_URL = (CFG.SUPABASE_URL || '').replace(/\/+$/, '');
   const BUCKET = 'artworks';
+  const BUILD = 'build 3';
+  let lastLoadError = '';
 
   const STORE_KEY = 'arArchive.items.v1';
   const DB_NAME = 'arArchiveFiles';
@@ -183,6 +185,7 @@
       list = await fetchRemoteItems();
     } catch (e) {
       console.error(e);
+      lastLoadError = e.message || 'unknown error';
       toast('Could not reach the shared archive. Showing samples only.');
     }
     if (CFG.SHOW_SAMPLES) list = list.concat(SAMPLE_ITEMS);
@@ -299,9 +302,14 @@
       grid.replaceChildren(...list.map(buildCard));
       empty.hidden = list.length > 0;
       const total = items.length;
-      count.textContent = list.length === total
+      const source = !CLOUD
+        ? ' · THIS DEVICE ONLY (config.js has no Supabase keys)'
+        : lastLoadError
+          ? ` · SHARED ARCHIVE ERROR: ${lastLoadError}`
+          : ' · shared archive connected';
+      count.textContent = (list.length === total
         ? `${total} artwork${total === 1 ? '' : 's'}`
-        : `${list.length} of ${total} artworks`;
+        : `${list.length} of ${total} artworks`) + source;
     }
 
     /* ----- Events ----- */
@@ -559,6 +567,13 @@
         const txt = await res.text().catch(() => '');
         throw new Error(`Could not save the artwork details (${res.status}). ${txt}`.slice(0, 220));
       }
+
+      // Confirm the row really exists in Supabase before reporting success
+      const check = await fetch(`${SB_URL}/rest/v1/artworks?id=eq.${id}&select=id`, { headers: sbHeaders() });
+      const rows = check.ok ? await check.json() : [];
+      if (!rows.length) {
+        throw new Error('The artwork was sent but could not be read back from Supabase. Check the "public read artworks" policy.');
+      }
     }
 
     async function saveLocally(file, fields, thumbnail) {
@@ -624,6 +639,8 @@
 
   /* ---------- Boot ---------- */
   document.addEventListener('DOMContentLoaded', () => {
+    const tag = $('.site-footer p');
+    if (tag) tag.append(` (${BUILD}, ${CLOUD ? 'shared' : 'local'} mode)`);
     const page = document.body.dataset.page;
     if (page === 'gallery') initGallery();
     if (page === 'upload') initUpload();
