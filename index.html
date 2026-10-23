@@ -6,7 +6,6 @@
   <meta name="theme-color" content="#faf9f6">
   <title>AR Art &amp; Design Archive</title>
 
-  <!-- Import Map to resolve bare module specifiers like "three" -->
   <script type="importmap">
     {
       "imports": {
@@ -46,21 +45,14 @@
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input id="searchInput" type="search" placeholder="Search by student name or lecturer…" autocomplete="off">
       </div>
-
       <div class="field">
         <label for="classFilter" class="sr-only">Filter by class code</label>
-        <select id="classFilter">
-          <option value="">All class codes</option>
-        </select>
+        <select id="classFilter"><option value="">All class codes</option></select>
       </div>
-
       <div class="field">
         <label for="periodFilter" class="sr-only">Filter by time period</label>
-        <select id="periodFilter">
-          <option value="">All periods</option>
-        </select>
+        <select id="periodFilter"><option value="">All periods</option></select>
       </div>
-
       <button type="button" id="resetFilters" class="btn btn-ghost">Reset</button>
     </section>
 
@@ -74,15 +66,37 @@
     </div>
   </main>
 
-  <!-- VIEW 2: Immersive 3D Procedural Architectural Gallery Walkthrough -->
+  <!-- VIEW 2: Immersive 3D Gallery -->
   <section id="gallery-view-container" style="display: none;">
+
+    <!-- HUD -->
     <div class="gallery-hud">
-      <span class="hud-instruction">💡 Drag to look · WASD / arrows to walk · Click art to open</span>
-      <select id="class-jump-select">
-        <option value="">Select Class Room...</option>
-      </select>
+      <div class="hud-row">
+        <span class="hud-instruction">
+          <strong>WASD</strong> walk · <strong>Drag</strong> to look · <strong>Tap art</strong> to open
+        </span>
+      </div>
+      <div class="hud-row">
+        <label for="class-jump-select" class="hud-label">Jump to class</label>
+        <select id="class-jump-select">
+          <option value="">Select a room…</option>
+        </select>
+      </div>
     </div>
+
+    <!-- Loading overlay -->
+    <div id="gallery-loading" class="gallery-loading">
+      <div class="spinner" aria-hidden="true"></div>
+      <p>Building museum…</p>
+    </div>
+
+    <!-- 3D canvas host -->
     <div id="canvas-container"></div>
+
+    <!-- Touch joystick (mobile) -->
+    <div id="joystick" class="joystick" aria-hidden="true">
+      <div class="joystick-knob"></div>
+    </div>
   </section>
 
   <footer class="site-footer">
@@ -91,29 +105,25 @@
     </div>
   </footer>
 
-  <!-- Detail view modal -->
+  <!-- Detail modal -->
   <div id="detailModal" class="modal" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
       <button type="button" class="modal-close" data-close aria-label="Close detail view">×</button>
-
       <div class="viewer-wrap">
         <div id="viewerHost" class="viewer-host"></div>
         <p class="viewer-hint">Drag to rotate · Pinch to zoom · AR on Android needs Google Play Services for AR and the Google app, both up to date</p>
       </div>
-
       <div class="detail-info">
         <p class="eyebrow" id="detailClass"></p>
         <h2 id="detailTitle"></h2>
         <p class="detail-desc" id="detailDesc"></p>
-
         <dl class="meta">
           <div><dt>Student</dt><dd id="detailStudent"></dd></div>
           <div><dt>Lecturer</dt><dd id="detailLecturer"></dd></div>
           <div><dt>Class code</dt><dd id="detailCode"></dd></div>
           <div><dt>Period</dt><dd id="detailPeriod"></dd></div>
         </dl>
-
         <button type="button" id="deleteBtn" class="btn btn-danger" hidden>Delete this artwork</button>
       </div>
     </div>
@@ -122,7 +132,6 @@
   <script src="config.js?v=4"></script>
   <script src="app.js?v=4"></script>
 
-  <!-- Gallery View Switcher & Three.js Initializer -->
   <script type="module">
     import { ArchitecturalGallery } from './gallery.js';
 
@@ -131,52 +140,55 @@
     const btnGrid = document.getElementById('btn-grid-view');
     const btnGallery = document.getElementById('btn-gallery-view');
     const jumpSelect = document.getElementById('class-jump-select');
+    const loading = document.getElementById('gallery-loading');
 
     let galleryInstance = null;
 
     btnGrid.addEventListener('click', () => {
       gridView.style.display = 'block';
       galleryView.style.display = 'none';
+      document.body.classList.remove('view-3d');
       btnGrid.classList.add('btn-primary', 'active-tab');
       btnGrid.classList.remove('btn-ghost');
       btnGallery.classList.add('btn-ghost');
       btnGallery.classList.remove('btn-primary', 'active-tab');
-
-      // Pause the 3D render loop to save battery
       if (galleryInstance) galleryInstance.pause();
     });
 
     btnGallery.addEventListener('click', () => {
       gridView.style.display = 'none';
       galleryView.style.display = 'block';
+      document.body.classList.add('view-3d');
       btnGallery.classList.add('btn-primary', 'active-tab');
       btnGallery.classList.remove('btn-ghost');
       btnGrid.classList.add('btn-ghost');
       btnGrid.classList.remove('btn-primary', 'active-tab');
 
-      // Rebuild every time so the 3D view reflects the latest archive data
-      // (uploads made on another device, local deletes, etc.)
+      /* Rebuild fresh so new uploads / deletes are reflected */
       if (galleryInstance) {
         galleryInstance.dispose();
         galleryInstance = null;
       }
 
+      loading.hidden = false;
+
       requestAnimationFrame(() => {
         galleryInstance = new ArchitecturalGallery(
           document.getElementById('canvas-container'),
           art => {
-            // Open the shared detail modal (defined in app.js)
-            if (window.openArchiveDetail) window.openArchiveDetail(art.id);
+            if (window.openArchiveDetail && art && art.id) {
+              window.openArchiveDetail(art.id);
+            }
           }
         );
 
-        // Populate the class-jump dropdown once the museum is built
         galleryInstance.onReady = () => {
-          jumpSelect.innerHTML = '<option value="">Jump to Class Room...</option>';
+          loading.hidden = true;
+          jumpSelect.innerHTML = '<option value="">Select a room…</option>';
           galleryInstance.classes.forEach((cls, idx) => {
             const opt = document.createElement('option');
             opt.value = idx;
-            opt.textContent = `${cls.code}: ${cls.name}`;
+            opt.textContent = `${cls.code} — ${cls.name}`;
             jumpSelect.appendChild(opt);
           });
         };
@@ -184,13 +196,12 @@
     });
 
     jumpSelect.addEventListener('change', e => {
-      const idx = parseInt(e.target.value);
+      const idx = parseInt(e.target.value, 10);
       if (!isNaN(idx) && galleryInstance) {
         galleryInstance.jumpToClass(idx);
       }
     });
 
-    // Tidy up on page unload
     window.addEventListener('beforeunload', () => {
       if (galleryInstance) galleryInstance.dispose();
     });
