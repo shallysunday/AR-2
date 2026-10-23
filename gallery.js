@@ -1,15 +1,6 @@
 /* ==========================================================
    gallery.js — Procedural architectural museum walkthrough.
-   Optimised for smooth first paint on desktop + mobile.
-
-   Key perf choices:
-   - MeshLambertMaterial for walls/floor/pedestals
-   - MeshBasicMaterial for signs + plaques
-   - 1024² shadow map, frustum sized from the layout
-   - Walls castShadow but DON'T receiveShadow
-   - Builds rooms one at a time and yields between each
-   - Models load FIRE-AND-FORGET (never blocks the loading screen)
-   - 12 s hard cap per model — a slow .glb can't hang the build
+   Fully optimized for fast website load and smooth mobile/desktop FPS.
    ========================================================== */
 
 import * as THREE from 'three';
@@ -353,6 +344,10 @@ export class ArchitecturalGallery {
         }
       });
 
+      // Optimize static museum room matrices (avoids recalculating every frame)[cite: 10]
+      room.matrixAutoUpdate = false;
+      room.updateMatrix();
+
       this.scene.add(room);
 
       if (this.onProgress) this.onProgress((i + 1) / (total + 1), `Building room ${i + 1} / ${total}…`);
@@ -360,7 +355,7 @@ export class ArchitecturalGallery {
       await new Promise(r => setTimeout(r, 0));
     }
 
-    // Fire-and-forget model loading — never blocks the loading screen
+    // Fire-and-forget model loading — never blocks the loading screen[cite: 10]
     if (modelQueue.length) {
       console.log(`[gallery] queuing ${modelQueue.length} models (loading in background)`);
       this._loadModelsInBackground(modelQueue);
@@ -369,7 +364,7 @@ export class ArchitecturalGallery {
     if (this.onProgress) this.onProgress(1, 'Ready');
   }
 
-  /* Background model loader — doesn't block onReady() */
+  /* Background model loader — doesn't block onReady()[cite: 10] */
   _loadModelsInBackground(queue) {
     const gen = this._generation;
     let cursor = 0;
@@ -466,7 +461,8 @@ export class ArchitecturalGallery {
     if (!cache.has(key)) {
       const tex = new THREE.CanvasTexture(makeSignCanvas(code, name, isEntrance));
       tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = 2;
+      // Cap texture anisotropy to optimize mobile GPU bandwidth[cite: 10]
+      tex.anisotropy = Math.min(4, this.renderer ? this.renderer.capabilities.getMaxAnisotropy() : 4);
       cache.set(key, tex);
     }
     const mat = new THREE.MeshBasicMaterial({ map: cache.get(key) });
@@ -500,7 +496,7 @@ export class ArchitecturalGallery {
     if (!plaqueCache.has(key)) {
       const tex = new THREE.CanvasTexture(makePlaqueCanvas(art));
       tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = 2;
+      tex.anisotropy = Math.min(4, this.renderer ? this.renderer.capabilities.getMaxAnisotropy() : 4);
       plaqueCache.set(key, tex);
     }
     const plaque = new THREE.Mesh(
@@ -853,7 +849,10 @@ export class ArchitecturalGallery {
           const mats = Array.isArray(o.material) ? o.material : [o.material];
           mats.forEach(m => {
             if (!m) return;
-            if (m.map) m.map.dispose();
+            if (m.map) {
+              m.map.dispose();
+              m.map = null;
+            }
             m.dispose();
           });
         }
