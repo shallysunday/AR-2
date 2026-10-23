@@ -30,8 +30,8 @@
         </span>
       </a>
       <nav class="nav">
-        <button type="button" id="btn-grid-view" class="btn btn-primary active-tab">📋 Archive Grid</button>
-        <button type="button" id="btn-gallery-view" class="btn btn-ghost">🚶‍♂️ 3D Gallery</button>
+        <button type="button" id="btn-grid-view" class="btn btn-primary active-tab">Archive Grid</button>
+        <button type="button" id="btn-gallery-view" class="btn btn-ghost">3D Gallery</button>
         <a class="btn btn-primary" href="upload.html?v=4">+ Add artwork</a>
       </nav>
     </div>
@@ -207,8 +207,14 @@
 
         galleryInstance.onReady = err => {
           clearTimers();
+          if (err) {
+            console.error('3D gallery build failed:', err);
+            loading.hidden = false;
+            loading.classList.add('is-error');
+            loadingText.textContent = `Could not build the 3D gallery: ${err.message || 'Check the browser console.'}`;
+            return;
+          }
           loading.hidden = true;
-          if (err) console.error('3D gallery build failed:', err);
           if (galleryInstance.classes && galleryInstance.classes.length) {
             jumpSelect.innerHTML = '<option value="">Select a room…</option>';
             galleryInstance.classes.forEach((cls, idx) => {
@@ -219,6 +225,16 @@
             });
           }
         };
+
+        // IMPORTANT: constructing ArchitecturalGallery only sets up its state;
+        // init() must be called to create the renderer and build the museum.
+        galleryInstance.init().catch(error => {
+          clearTimers();
+          console.error('3D gallery initialization failed:', error);
+          loading.hidden = false;
+          loading.classList.add('is-error');
+          loadingText.textContent = `Could not start the 3D gallery: ${error.message || 'Check the browser console.'}`;
+        });
       });
     });
 

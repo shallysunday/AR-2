@@ -204,6 +204,7 @@ export class ArchitecturalGallery {
       await this.loadDataAndBuild();
     } catch (error) {
       console.error('3D gallery build failed', error);
+      throw error; // Let index.html display the real failure instead of hiding it.
     }
 
     this._resizeHandler = () => this.onWindowResize();
