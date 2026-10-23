@@ -183,6 +183,7 @@
     let list = [];
     try {
       list = await fetchRemoteItems();
+      lastLoadError = '';                        // ★ NEW: clear any previous error on success
     } catch (e) {
       console.error(e);
       lastLoadError = e.message || 'unknown error';
@@ -394,6 +395,11 @@
       $('.modal-close', modal).focus();
     }
 
+    // ★ NEW: let the 3D gallery open the same detail modal by id
+    window.openArchiveDetail = id => {
+      if (modal.hidden) openDetail(id);
+    };
+
     function closeDetail() {
       modal.hidden = true;
       document.body.classList.remove('modal-open');
@@ -487,6 +493,11 @@
       previewUrl = URL.createObjectURL(file);
       viewer.setAttribute('src', previewUrl);
       previewBox.hidden = false;
+    });
+
+    // ★ NEW: free the preview blob URL when the page unloads
+    window.addEventListener('beforeunload', () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
     });
 
     viewer.addEventListener('load', () => { modelReady = true; });
@@ -641,6 +652,14 @@
   }
 
   /* ---------- Boot ---------- */
+
+  // ★ NEW: expose archive helpers to the 3D gallery module (gallery.js)
+  window.arArchive = {
+    loadAll,
+    getModel,
+    isCloud: CLOUD
+  };
+
   document.addEventListener('DOMContentLoaded', () => {
     const tag = $('.site-footer p');
     if (tag) tag.append(` (${BUILD}, ${CLOUD ? 'shared' : 'local'} mode)`);
