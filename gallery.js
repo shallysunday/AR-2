@@ -1,6 +1,6 @@
 /* ==========================================================
    gallery.js — Three.js renderer for the procedural museum.
-   Builds the all-white architectural model, doors, signs,
+   Builds the all-white architectural model, doors, signs, 
    pedestals, lighting, and smooth room-jump transitions.
    ========================================================== */
 
