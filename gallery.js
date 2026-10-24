@@ -123,7 +123,7 @@ function makeWallGradientTexture() {
   const g = ctx.createLinearGradient(0, 0, 0, 256);
   g.addColorStop(0, '#ffffff');
   g.addColorStop(0.5, '#f4f4f6');
-  g.addColorStop(1, '#b9b9c0');
+  g.addColorStop(1, '#dddde0');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 4, 256);
 
@@ -144,16 +144,16 @@ function makeFloorGridTexture(maxAnisotropy) {
   ctx.fillStyle = '#dadade';
   ctx.fillRect(0, 0, S, S);
 
-  // minor line (1 m)
+  /* minor line (1 m)
   ctx.strokeStyle = 'rgba(110, 110, 122, 0.20)';
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(S / 2, 0); ctx.lineTo(S / 2, S);
   ctx.moveTo(0, S / 2); ctx.lineTo(S, S / 2);
-  ctx.stroke();
+  ctx.stroke(); */
 
   // major line (2 m) on the tile edge
-  ctx.strokeStyle = 'rgba(90, 90, 102, 0.34)';
+  ctx.strokeStyle = 'rgba(138, 138, 149, 0.34)';
   ctx.lineWidth = 4;
   ctx.strokeRect(0, 0, S, S);
 
@@ -172,10 +172,15 @@ function makeBlobTexture() {
   c.height = S;
   const ctx = c.getContext('2d');
 
-  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-  g.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
-  g.addColorStop(0.5, 'rgba(0, 0, 0, 0.22)');
+  const g = ctx.createRadialGradient(
+    S / 2, S / 2, 0,
+    S / 2, S / 2, S / 2
+  );
+
+  g.addColorStop(0, 'rgba(0, 0, 0, 0.18)');
+  g.addColorStop(0.5, 'rgba(0, 0, 0, 0.06)');
   g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, S, S);
 
@@ -249,31 +254,27 @@ export class ArchitecturalGallery {
 
     this.renderer.setPixelRatio(this._lastPixelRatio);
     this.renderer.setSize(width, height);
-    this.renderer.shadowMap.enabled = !isSmallScreen;
+    
+    // Disable real-time directional shadows for softer, better performance.
+    this.renderer.shadowMap.enabled = false;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
 
     this.container.appendChild(this.renderer.domElement);
 
-    // Lighting: cool sky / warm ground bounce + warm key sun + cool fill.
-    // Only the key light casts shadows, so the cost stays low.
-    this.scene.add(new THREE.HemisphereLight(0xf4f7ff, 0xd9d4cb, 0.75));
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.12));
-
-    const key = new THREE.DirectionalLight(0xfff1dc, 1.35);
-    key.position.set(24, 40, 22);
-    key.castShadow = !isSmallScreen;
-    key.shadow.mapSize.set(
-      isSmallScreen ? 512 : 2048,
-      isSmallScreen ? 512 : 2048
+    // Soft ambient illumination throughout the gallery.
+    this.scene.add(
+      new THREE.HemisphereLight(0xf7f8ff, 0xe2ded8, 0.85)
     );
-    key.shadow.bias = -0.0004;
-    key.shadow.normalBias = 0.03;
-    key.shadow.camera.far = 300;
 
-    this.scene.add(key);
-    this.keyLight = key;
+    this.scene.add(
+      new THREE.AmbientLight(0xffffff, 0.42)
+    );
+
+    // No directional sun or directional key light.
+    this.keyLight = null;
 
     const fill = new THREE.DirectionalLight(0xdfe9ff, 0.4);
     fill.position.set(-26, 22, -18);
@@ -434,6 +435,7 @@ export class ArchitecturalGallery {
   }
 
   fitShadowCamera() {
+    /*
     let x0 = Infinity, x1 = -Infinity;
     let z0 = Infinity, z1 = -Infinity;
 
@@ -460,6 +462,7 @@ export class ArchitecturalGallery {
     this.keyLight.position.set(cx + 24, 40, cz + 22);
     this.keyLight.target.position.set(cx, 0, cz);
     this.scene.add(this.keyLight.target);
+    */
   }
 
   countMeshes() {
@@ -471,7 +474,7 @@ export class ArchitecturalGallery {
   }
 
   async buildMuseumGeometry() {
-    const H = 8;
+    const H = 12;
     const total = this.plan.entries.length;
 
     const FLOOR_TILE = 2; // metres covered by one grid texture tile
@@ -486,7 +489,7 @@ export class ArchitecturalGallery {
         Math.min(4, this.renderer.capabilities.getMaxAnisotropy())
       )
     });
-    const ceilMat = new THREE.MeshLambertMaterial({ color: 0xf6f6f8 });
+    const ceilMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
     const pedestalMat = new THREE.MeshLambertMaterial({ color: 0xfbfaf7 });
     const stripMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
@@ -538,20 +541,42 @@ export class ArchitecturalGallery {
       floor.receiveShadow = true;
       room.add(floor);
 
+      // Ceiling
       const ceiling = new THREE.Mesh(ceilingGeo, ceilMat);
       ceiling.scale.set(entry.W, entry.D, 1);
       ceiling.rotation.x = Math.PI / 2;
       ceiling.position.y = H;
       room.add(ceiling);
 
-      // Two glowing light strips so the room reads as lit from above
-      for (const sx of [-0.25, 0.25]) {
-        const strip = new THREE.Mesh(ceilingGeo, stripMat);
-        strip.scale.set(0.3, entry.D * 0.7, 1);
-        strip.rotation.x = Math.PI / 2;
-        strip.position.set(entry.W * sx, H - 0.02, 0);
-        room.add(strip);
-      }
+      // One warm light at the center of this room's ceiling.
+      const ceilingLight = new THREE.PointLight(
+        0xfff4e6,                     // Warm white
+        38,                            // Light intensity
+        Math.max(entry.W, entry.D) * 2.8,
+        1.7                            // Light falloff
+      );
+
+      ceilingLight.position.set(0, H - 0.35, 0);
+      ceilingLight.castShadow = false;
+      room.add(ceilingLight);
+
+      // Visible ceiling panel where the light comes from.
+      const lightPanel = new THREE.Mesh(
+        new THREE.PlaneGeometry(
+          Math.min(2.4, entry.W * 0.28),
+          Math.min(2.4, entry.D * 0.18)
+        ),
+        new THREE.MeshBasicMaterial({
+          color: 0xfff7e9,
+          transparent: true,
+          opacity: 0.92,
+          side: THREE.DoubleSide
+        })
+      );
+
+      lightPanel.rotation.x = Math.PI / 2;
+      lightPanel.position.set(0, H - 0.025, 0);
+      room.add(lightPanel);
 
       this.buildWalls(room, entry, H, wallMat);
 
@@ -665,7 +690,7 @@ export class ArchitecturalGallery {
     const halfW = W / 2;
     const halfD = D / 2;
     const thickness = WALL_T;
-    const doorHeight = 3;
+    const doorHeight = 6;
     const doorWidth = DOOR_W;
 
     const segment = (x0, z0, x1, z1) => {
