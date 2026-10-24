@@ -711,49 +711,78 @@ export class ArchitecturalGallery {
 
     const wallWithDoor = (x0, z0, x1, z1, doorFraction) => {
       const length = Math.hypot(x1 - x0, z1 - z0);
-      if (length < doorWidth + 0.1) return;
+      if (length < 0.3) return;
 
-      const cx = x0 + (x1 - x0) * doorFraction;
-      const cz = z0 + (z1 - z0) * doorFraction;
       const horizontal = Math.abs(z1 - z0) < 1e-4;
 
-      // Classic pointed arch dimensions.
-      const archWidth = Math.min(doorWidth, length * 0.7);
-      const springY   = doorHeight * 0.68;
+      // Shrink the door if the wall is narrow so the arch always fits.
+      const archWidth = Math.min(doorWidth, length * 0.6);
       const halfArch  = archWidth / 2;
 
-      // Control height must be BELOW the apex, otherwise the Bezier
-      // overshoots and the apex becomes a dip (arch looks inverted).
-      const shoulderY = springY + (doorHeight - springY) * 0.4;
+      // Too narrow to hold even a slim arch → draw a solid wall instead of
+      // returning silently (that was another source of "missing" walls).
+      if (length < archWidth + 0.2) {
+        segment(x0, z0, x1, z1);
+        return;
+      }
+
+      // Clamp so the arch never pokes outside the wall.
+      const minFrac = (halfArch + 0.05) / length;
+      const maxFrac = 1 - (halfArch + 0.05) / length;
+      const frac = Math.max(minFrac, Math.min(maxFrac, doorFraction));
+
+      // ★ Mesh sits at the WALL midpoint, not at the door.
+      const wallCx = (x0 + x1) / 2;
+      const wallCz = (z0 + z1) / 2;
+
+      // ★ Door offset relative to wall centre. Negate for vertical walls
+      //   because geometry.rotateY(π/2) maps local +X to world −Z.
+      const rawOffset  = (frac - 0.5) * length;
+      const doorOffset = horizontal ? rawOffset : -rawOffset;
+
+      // Pointed (Islamic) arch geometry.
+      const springY = doorHeight * 0.5;     // ← lower spring = real arch, not slot
+      const rise    = doorHeight - springY;
+
+      const leftX  = doorOffset - halfArch;
+      const rightX = doorOffset + halfArch;
 
       const shape = new THREE.Shape();
 
       shape.moveTo(-length / 2, 0);
-      shape.lineTo(-halfArch, 0);
-      shape.lineTo(-halfArch, springY);
+      shape.lineTo(leftX, 0);
+      shape.lineTo(leftX, springY);
 
-      // Left half: rises to an upward-pointing apex.
-      shape.quadraticCurveTo(-halfArch * 0.6, shoulderY, 0, doorHeight);
+      // Left half — cubic Bézier:
+      //  C1 directly above spring  → smooth vertical takeoff from the wall
+      //  C2 just below apex, near centre → steep, pointed tip
+      shape.bezierCurveTo(
+        leftX,                         springY + rise * 0.55,
+        doorOffset - halfArch * 0.18,  doorHeight - rise * 0.08,
+        doorOffset,                    doorHeight
+      );
 
-      // Right half: descends from the apex.
-      shape.quadraticCurveTo( halfArch * 0.6, shoulderY, halfArch, springY);
+      // Right half — mirrored
+      shape.bezierCurveTo(
+        doorOffset + halfArch * 0.18,  doorHeight - rise * 0.08,
+        rightX,                        springY + rise * 0.55,
+        rightX,                        springY
+      );
 
-      shape.lineTo(halfArch, 0);
+      shape.lineTo(rightX, 0);
       shape.lineTo(length / 2, 0);
       shape.lineTo(length / 2, height);
       shape.lineTo(-length / 2, height);
       shape.closePath();
 
-      // Extrude the wall profile to preserve wall thickness.
       const geometry = new THREE.ExtrudeGeometry(shape, {
         depth: thickness,
         bevelEnabled: false,
-        curveSegments: 20
+        curveSegments: 24
       });
 
       geometry.translate(0, 0, -thickness / 2);
 
-      // Side walls run along the Z axis instead of X.
       if (!horizontal) {
         geometry.rotateY(Math.PI / 2);
       }
@@ -761,12 +790,12 @@ export class ArchitecturalGallery {
       this._mapWallV(geometry, height / 2, height);
 
       const wall = new THREE.Mesh(geometry, material);
-      wall.position.set(cx, 0, cz);
+      wall.position.set(wallCx, 0, wallCz);      // ★ wall centre
       wall.castShadow = true;
       wall.receiveShadow = true;
 
       group.add(wall);
-    };
+  };
 
 
     wallWithDoor(-halfW, halfD, halfW, halfD, 0.5);
