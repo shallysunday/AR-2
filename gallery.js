@@ -508,6 +508,37 @@ export class ArchitecturalGallery {
     const H = 9;
     const total = this.plan.entries.length;
 
+    const entries = this.plan.entries;
+
+    // Ordered list of the "real" classroom rooms (pre/post are loop connectors).
+    const mainEntries = entries.filter(e => e.role === 'main');
+    const M = mainEntries.length;
+    const mainPos = new Map();
+    mainEntries.forEach((e, k) => mainPos.set(e, k));
+
+    // Class reachable by walking through the entrance door (dir = -1)
+    // or the exit door (dir = +1). Follows the same loop-teleport rules
+    // as checkLoopTeleport(): pre → lastMain, post → firstMain.
+    const neighborClass = (entry, dir) => {
+      if (!M) return null;
+
+      if (entry.role === 'main') {
+        const k = mainPos.get(entry);
+        if (k === undefined) return null;
+        const target = mainEntries[(k + dir + M) % M];
+        return target ? this.classes[target.ci] : null;
+      }
+
+      if (entry.role === 'pre' || entry.role === 'post') {
+        // pre sits before main[0]; post sits after main[M-1].
+        // Backward → lastMain, forward → firstMain (both physical & teleport).
+        const target = mainEntries[dir < 0 ? M - 1 : 0];
+        return target ? this.classes[target.ci] : null;
+      }
+
+      return null;
+    };
+
     const FLOOR_TILE = 2; // metres covered by one grid texture tile
 
     const wallMat = new THREE.MeshLambertMaterial({
@@ -611,13 +642,16 @@ export class ArchitecturalGallery {
 
       this.buildWalls(room, entry, H, wallMat);
 
-      this.createSign(
-        room, entry, cls.code, cls.name, true, signGeo, signTextures
-      );
+      // Signs show the room BEYOND each door, not the room you're standing in.
+      const prevCls = neighborClass(entry, -1);   // entrance → behind the door
+      const nextCls = neighborClass(entry, +1);   // exit     → through the door
 
-      this.createSign(
-        room, entry, cls.code, cls.name, false, signGeo, signTextures
-      );
+      if (prevCls) {
+        this.createSign(room, entry, prevCls.code, prevCls.name, true,  signGeo, signTextures);
+      }
+      if (nextCls) {
+        this.createSign(room, entry, nextCls.code, nextCls.name, false, signGeo, signTextures);
+      }
 
       const slots = artSlots(entry, cls.items.length);
 
@@ -806,7 +840,7 @@ export class ArchitecturalGallery {
         geometry.rotateY(Math.PI / 2);
       }
 
-      this._mapWallV(geometry, height / 2, height);
+      this._mapWallV(geometry, 0, height);
 
       const wall = new THREE.Mesh(geometry, material);
       wall.position.set(wallCx, 0, wallCz);      // ★ wall centre
