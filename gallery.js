@@ -9,20 +9,56 @@ const MAX_ARTWORKS_3D = 80;
 const CONCURRENT_MODELS = 3;
 const PLAQUE_W = 1.1, PLAQUE_H = 0.72;
 
-function makeSignCanvas(classCode, className, isEntrance) {
-  const W = 512, H = 128;
+function makeSignCanvas(classCode, className) {
+  const W = 384, H = 128;
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d');
 
-  ctx.fillStyle = '#1b1b1a';
-  ctx.fillRect(0, 0, W, H);
+  // No background — transparent canvas, only ink is drawn.
+  ctx.clearRect(0, 0, W, H);
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 28px -apple-system, "Segoe UI", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(`${classCode} · ${className.toUpperCase()}`, W / 2, H / 2 + 2);
+  const ink = '#1b1b1a';
+
+  // ---- Up arrow (left side) ----
+  const cx = 62;
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Stem
+  ctx.beginPath();
+  ctx.moveTo(cx, 102);
+  ctx.lineTo(cx, 50);
+  ctx.stroke();
+
+  // Head
+  ctx.beginPath();
+  ctx.moveTo(cx - 18, 52);
+  ctx.lineTo(cx, 24);
+  ctx.lineTo(cx + 18, 52);
+  ctx.stroke();
+
+  // ---- Text (right side) ----
+  const textX    = 118;
+  const textMaxW = W - textX - 18;
+
+  ctx.fillStyle    = ink;
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = 'middle';
+
+  // Line 1: class code (small)
+  ctx.font = 'bold 20px -apple-system, "Segoe UI", sans-serif';
+  ctx.fillText((classCode || '').toUpperCase(), textX, 52);
+
+  // Line 2: class name (main)
+  ctx.font = 'bold 30px -apple-system, "Segoe UI", sans-serif';
+  ctx.fillText(
+    clamp(ctx, (className || '').toUpperCase(), textMaxW),
+    textX, 92
+  );
 
   return c;
 }
@@ -503,7 +539,7 @@ export class ArchitecturalGallery {
 
     const ceilingGeo = new THREE.PlaneGeometry(1, 1);
     const plaqueGeo = new THREE.PlaneGeometry(PLAQUE_W, PLAQUE_H);
-    const signGeo = new THREE.PlaneGeometry(3.2, 0.8);
+    const signGeo = new THREE.PlaneGeometry(1.5, 0.5);   // 3:1, matches canvas
     const pedestalGeo = new THREE.BoxGeometry(1.2, 1.1, 1.2);
 
     const signTextures = new Map();
@@ -715,34 +751,30 @@ export class ArchitecturalGallery {
 
       const horizontal = Math.abs(z1 - z0) < 1e-4;
 
-      // Shrink the door if the wall is narrow so the arch always fits.
-      const archWidth = Math.min(doorWidth, length * 0.6);
+      // ----- Semicircular (half-circle) arch -----
+      // Constrain width so the arc (radius = halfArch) still fits under doorHeight,
+      // otherwise the spring line would dip below the floor.
+      const archWidth = Math.min(doorWidth, length * 0.6, doorHeight * 1.8);
       const halfArch  = archWidth / 2;
 
-      // Too narrow to hold even a slim arch → draw a solid wall instead of
-      // returning silently (that was another source of "missing" walls).
       if (length < archWidth + 0.2) {
-        segment(x0, z0, x1, z1);
+        segment(x0, z0, x1, z1);   // wall too narrow → solid, not "missing"
         return;
       }
 
-      // Clamp so the arch never pokes outside the wall.
       const minFrac = (halfArch + 0.05) / length;
       const maxFrac = 1 - (halfArch + 0.05) / length;
-      const frac = Math.max(minFrac, Math.min(maxFrac, doorFraction));
+      const frac    = Math.max(minFrac, Math.min(maxFrac, doorFraction));
 
-      // ★ Mesh sits at the WALL midpoint, not at the door.
       const wallCx = (x0 + x1) / 2;
       const wallCz = (z0 + z1) / 2;
 
-      // ★ Door offset relative to wall centre. Negate for vertical walls
-      //   because geometry.rotateY(π/2) maps local +X to world −Z.
       const rawOffset  = (frac - 0.5) * length;
       const doorOffset = horizontal ? rawOffset : -rawOffset;
 
-      // Pointed (Islamic) arch geometry.
-      const springY = doorHeight * 0.5;     // ← lower spring = real arch, not slot
-      const rise    = doorHeight - springY;
+      // Spring line = height the arc starts curving at.
+      // Apex of the arc lands exactly at doorHeight.
+      const springY = doorHeight - halfArch;
 
       const leftX  = doorOffset - halfArch;
       const rightX = doorOffset + halfArch;
@@ -753,21 +785,8 @@ export class ArchitecturalGallery {
       shape.lineTo(leftX, 0);
       shape.lineTo(leftX, springY);
 
-      // Left half — cubic Bézier:
-      //  C1 directly above spring  → smooth vertical takeoff from the wall
-      //  C2 just below apex, near centre → steep, pointed tip
-      shape.bezierCurveTo(
-        leftX,                         springY + rise * 0.55,
-        doorOffset - halfArch * 0.18,  doorHeight - rise * 0.08,
-        doorOffset,                    doorHeight
-      );
-
-      // Right half — mirrored
-      shape.bezierCurveTo(
-        doorOffset + halfArch * 0.18,  doorHeight - rise * 0.08,
-        rightX,                        springY + rise * 0.55,
-        rightX,                        springY
-      );
+      // Semicircle over the doorway: left spring point → top apex → right spring point
+      shape.absarc(doorOffset, springY, halfArch, Math.PI, 0, true);
 
       shape.lineTo(rightX, 0);
       shape.lineTo(length / 2, 0);
@@ -831,44 +850,80 @@ export class ArchitecturalGallery {
   }
 
   createSign(group, entry, code, name, isEntrance, geometry, cache) {
-    const key = `${code}-${isEntrance ? 'in' : 'out'}`;
-
-    if (!cache.has(key)) {
-      const texture = new THREE.CanvasTexture(
-        makeSignCanvas(code, name, isEntrance)
-      );
+    if (!cache.has(code)) {
+      const texture = new THREE.CanvasTexture(makeSignCanvas(code, name));
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.anisotropy = 2;
-      cache.set(key, texture);
+      cache.set(code, texture);
     }
 
+    // Transparent — no background plate, just arrow + text
     const material = new THREE.MeshBasicMaterial({
-      map: cache.get(key)
+      map: cache.get(code),
+      transparent: true,
+      depthWrite: false
     });
 
     const sign = new THREE.Mesh(geometry, material);
 
+    const halfW = entry.W / 2;
+    const halfD = entry.D / 2;
+
+    const signW     = 1.5;
+    const signHalfW = signW / 2;
+    const gap       = 0.15;      // gap between door opening and sign
+    const signY     = 2.6;
+
+    // door centre → sign centre, along the wall
+    const needed = DOOR_W / 2 + gap + signHalfW;
+
+    // Prefer placing to the right of the door; fall back to the left
+    // when the wall is too short on that side.
+    const place = (doorPos, halfWall) => {
+      const right = doorPos + needed;
+      const left  = doorPos - needed;
+      if (right + signHalfW <= halfWall - 0.1) return right;
+      if (left  - signHalfW >= -halfWall + 0.1) return left;
+      return THREE.MathUtils.clamp(
+        right, -halfWall + signHalfW + 0.1, halfWall - signHalfW - 0.1
+      );
+    };
+
+    // Offset from the wall plane so the sign sits just in front of the
+    // inner wall face, not embedded inside the wall.
+    const wallInset = WALL_T / 2 + 0.02;
+
     if (isEntrance) {
-      sign.position.set(0, 3.65, entry.D / 2 - 0.08);
-      sign.rotation.y = Math.PI;
+      sign.position.set(
+        place(0, halfW),
+        signY,
+        entry.D / 2 - wallInset
+      );
+      sign.rotation.y = Math.PI;   // face -Z, into the room
     } else {
       const exit = entry.exit;
 
       if (exit.side === 'N') {
         sign.position.set(
-          exit.pos[0], 3.65, -entry.D / 2 + 0.08
+          place(exit.pos[0], halfW),
+          signY,
+          -entry.D / 2 + wallInset
         );
-        sign.rotation.y = 0;
+        sign.rotation.y = 0;        // face +Z
       } else if (exit.side === 'W') {
         sign.position.set(
-          -entry.W / 2 + 0.08, 3.65, exit.pos[1]
+          -entry.W / 2 + wallInset,
+          signY,
+          place(exit.pos[1], halfD)
         );
-        sign.rotation.y = Math.PI / 2;
+        sign.rotation.y = Math.PI / 2;   // face +X
       } else {
         sign.position.set(
-          entry.W / 2 - 0.08, 3.65, exit.pos[1]
+          entry.W / 2 - wallInset,
+          signY,
+          place(exit.pos[1], halfD)
         );
-        sign.rotation.y = -Math.PI / 2;
+        sign.rotation.y = -Math.PI / 2;  // face -X
       }
     }
 
