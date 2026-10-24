@@ -18,11 +18,6 @@ function makeSignCanvas(classCode, className, isEntrance) {
 
   ctx.fillStyle = '#1b1b1a';
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#c8553d';
-  ctx.font = 'bold 56px -apple-system, "Segoe UI", sans-serif';
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = isEntrance ? 'left' : 'right';
-  ctx.fillText('→', isEntrance ? 24 : W - 24, H / 2 + 2);
 
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 28px -apple-system, "Segoe UI", sans-serif';
@@ -474,7 +469,7 @@ export class ArchitecturalGallery {
   }
 
   async buildMuseumGeometry() {
-    const H = 12;
+    const H = 9;
     const total = this.plan.entries.length;
 
     const FLOOR_TILE = 2; // metres covered by one grid texture tile
@@ -690,7 +685,7 @@ export class ArchitecturalGallery {
     const halfW = W / 2;
     const halfD = D / 2;
     const thickness = WALL_T;
-    const doorHeight = 6;
+    const doorHeight = 5;
     const doorWidth = DOOR_W;
 
     const segment = (x0, z0, x1, z1) => {
@@ -716,50 +711,71 @@ export class ArchitecturalGallery {
 
     const wallWithDoor = (x0, z0, x1, z1, doorFraction) => {
       const length = Math.hypot(x1 - x0, z1 - z0);
-      const doorHalfFraction = (doorWidth / 2) / length;
-
-      const a = Math.max(0, doorFraction - doorHalfFraction);
-      const b = Math.min(1, doorFraction + doorHalfFraction);
-
-      segment(
-        x0, z0,
-        x0 + (x1 - x0) * a,
-        z0 + (z1 - z0) * a
-      );
-
-      segment(
-        x0 + (x1 - x0) * b,
-        z0 + (z1 - z0) * b,
-        x1, z1
-      );
+      if (length < doorWidth + 0.1) return;
 
       const cx = x0 + (x1 - x0) * doorFraction;
       const cz = z0 + (z1 - z0) * doorFraction;
       const horizontal = Math.abs(z1 - z0) < 1e-4;
 
-      const geometry = horizontal
-        ? new THREE.BoxGeometry(
-            doorWidth, height - doorHeight, thickness
-          )
-        : new THREE.BoxGeometry(
-            thickness, height - doorHeight, doorWidth
-          );
+      // Classic pointed arch dimensions.
+      const archWidth = Math.min(doorWidth, length * 0.7);
+      const springY = doorHeight * 0.68;
+      const halfArch = archWidth / 2;
 
-      this._mapWallV(
-        geometry,
-        doorHeight + (height - doorHeight) / 2,
-        height
+      // Draw the entire wall profile around the doorway.
+      // The arch-shaped notch remains genuinely open.
+      const shape = new THREE.Shape();
+
+      shape.moveTo(-length / 2, 0);
+      shape.lineTo(-halfArch, 0);
+      shape.lineTo(-halfArch, springY);
+
+      // Left curve rises toward the pointed apex.
+      shape.quadraticCurveTo(
+        -halfArch * 0.92,
+        doorHeight + 0.35,
+        0,
+        doorHeight
       );
 
-      const lintel = new THREE.Mesh(geometry, material);
-      lintel.position.set(
-        cx,
-        doorHeight + (height - doorHeight) / 2,
-        cz
+      // Right curve descends from the pointed apex.
+      shape.quadraticCurveTo(
+        halfArch * 0.92,
+        doorHeight + 0.35,
+        halfArch,
+        springY
       );
-      lintel.castShadow = true;
-      group.add(lintel);
+
+      shape.lineTo(halfArch, 0);
+      shape.lineTo(length / 2, 0);
+      shape.lineTo(length / 2, height);
+      shape.lineTo(-length / 2, height);
+      shape.closePath();
+
+      // Extrude the wall profile to preserve wall thickness.
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: thickness,
+        bevelEnabled: false,
+        curveSegments: 20
+      });
+
+      geometry.translate(0, 0, -thickness / 2);
+
+      // Side walls run along the Z axis instead of X.
+      if (!horizontal) {
+        geometry.rotateY(Math.PI / 2);
+      }
+
+      this._mapWallV(geometry, height / 2, height);
+
+      const wall = new THREE.Mesh(geometry, material);
+      wall.position.set(cx, 0, cz);
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+
+      group.add(wall);
     };
+
 
     wallWithDoor(-halfW, halfD, halfW, halfD, 0.5);
 
