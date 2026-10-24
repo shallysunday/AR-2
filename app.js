@@ -1,852 +1,1571 @@
-/* ==========================================================
-   AR Art & Design Archive — app logic
-   ----------------------------------------------------------
-   Two storage modes, chosen by config.js:
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import {
+  bestPlan, walkRects, artSlots, groupByClass,
+  worldOf, rot, DOOR_W, WALL_T, CORR_L
+} from './gallery-layout.js';
 
-   CLOUD (Supabase URL + key set)
-     - metadata  → Supabase table "artworks"
-     - .glb + thumbnail → Supabase Storage bucket "artworks"
-     Everyone sees the same archive; new uploads appear on all devices.
+const MAX_ARTWORKS_3D = 80;
+const CONCURRENT_MODELS = 3;
+const PLAQUE_W = 1.1, PLAQUE_H = 0.72;
 
-   LOCAL (config left empty)
-     - metadata  → localStorage
-     - .glb      → IndexedDB
-     Only the current browser sees the uploads.
-   ========================================================== */
-(() => {
-  'use strict';
+function makeSignCanvas(classCode, className, isEntrance) {
+  const W = 512, H = 128;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d');
 
-  const CFG = Object.assign(
-    { SUPABASE_URL: '', SUPABASE_ANON_KEY: '', SHOW_SAMPLES: true },
-    window.ARCHIVE_CONFIG || {}
-  );
-  const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
-  const SB_URL = (CFG.SUPABASE_URL || '').replace(/\/+$/, '');
-  const BUCKET = 'artworks';
-  const BUILD = 'build 5';
-  let lastLoadError = '';
+  ctx.fillStyle = '#1b1b1a';
+  ctx.fillRect(0, 0, W, H);
 
-  // ★ NEW: cache the loadAll result so the 3D gallery doesn't refetch.
-  let itemsCache = null;
-  let itemsCacheTime = 0;
-  const ITEMS_CACHE_TTL = 30_000;   // 30 s
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 28px -apple-system, "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${classCode} · ${className.toUpperCase()}`, W / 2, H / 2 + 2);
 
-  const STORE_KEY = 'arArchive.items.v1';
-  const DB_NAME = 'arArchiveFiles';
-  const DB_STORE = 'models';
-  const MAX_FILE_MB = CLOUD ? 50 : 60;
+  return c;
+}
 
-  /* ---------- Sample artworks ---------- */
-  const MS = 'https://modelviewer.dev/shared-assets/models/';
-  // Demo records use public sample GLB models. Replace them with student work
-  // when real project models are available.
-  const SAMPLE_ITEMS = [
-    {
-      id: 'sample-nm-astronaut',
-      title: 'Orbit: Figure Study',
-      description: 'Digital sculpture study of volume and silhouette.',
-      student: 'Alya Putri',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
-      className: 'New Media',
-      classCode: 'NM101',
-      period: 'Odd 2026/2027',
-      modelUrl: MS + 'Astronaut.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-nm-robot',
-      title: 'Friendly Machine',
-      description: 'Character design exploring expression and gesture.',
-      student: 'Rizky Pratama',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
-      className: 'New Media',
-      classCode: 'NM101',
-      period: 'Odd 2026/2027',
-      modelUrl: MS + 'RobotExpressive.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-nm-lunar',
-      title: 'Lunar Portrait',
-      description: 'A portrait study as an interactive archive object.',
-      student: 'Dimas Wicaksono',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
-      className: 'New Media',
-      classCode: 'NM101',
-      period: 'Odd 2026/2027',
-      modelUrl: MS + 'NeilArmstrong.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-nm-fox',
-      title: 'Digital Creature',
-      description: 'A playful study of character and material.',
-      student: 'Siti Maharani',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
-      className: 'New Media',
-      classCode: 'NM101',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Fox/glTF-Binary/Fox.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-nm-man',
-      title: 'Walking Figure',
-      description: 'A figure study of posture and stride.',
-      student: 'Fajar Nugroho',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
-      className: 'New Media',
-      classCode: 'NM101',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/CesiumMan/glTF-Binary/CesiumMan.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tp-bottle',
-      title: 'Everyday Form',
-      description: 'A label study on a familiar object.',
-      student: 'Nabila Zahra',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Typography',
-      classCode: 'TP201',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/WaterBottle/glTF-Binary/WaterBottle.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tp-boombox',
-      title: 'Sound Object',
-      description: 'Lettering and surface graphics on a retro object.',
-      student: 'Kevin Hartono',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Typography',
-      classCode: 'TP201',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/BoomBox/glTF-Binary/BoomBox.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tp-avocado',
-      title: 'Packaging Fruit',
-      description: 'Visual communication on organic form.',
-      student: 'Laras Ayu',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Typography',
-      classCode: 'TP201',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Avocado/glTF-Binary/Avocado.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tp-lantern',
-      title: 'Signal Lantern',
-      description: 'Type and light as wayfinding.',
-      student: 'Bayu Aditya',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Typography',
-      classCode: 'TP201',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Lantern/glTF-Binary/Lantern.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tp-duck',
-      title: 'Rubber Duck Mark',
-      description: 'A mascot mark explored in three dimensions.',
-      student: 'Citra Dewi',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Typography',
-      classCode: 'TP201',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Duck/glTF-Binary/Duck.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tr-horse',
-      title: 'Horse in Motion',
-      description: 'A sculptural study of movement and balance.',
-      student: 'Nadia Rahma',
-      lecturer: 'Dr. Budi Santoso',
-      className: 'Trimatra',
-      classCode: 'TR301',
-      period: 'Odd 2026/2027',
-      modelUrl: MS + 'Horse.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tr-chair',
-      title: 'Object and Space',
-      description: 'Proportion and structure of an object in space.',
-      student: 'Bagas Firmansyah',
-      lecturer: 'Dr. Budi Santoso',
-      className: 'Trimatra',
-      classCode: 'TR301',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/SheenChair/glTF-Binary/SheenChair.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tr-helmet',
-      title: 'Surface Study',
-      description: 'Hard surfaces and highlights describing volume.',
-      student: 'Intan Permata',
-      lecturer: 'Dr. Budi Santoso',
-      className: 'Trimatra',
-      classCode: 'TR301',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/DamagedHelmet/glTF-Binary/DamagedHelmet.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tr-car',
-      title: 'Toy Vehicle',
-      description: 'A form study of a small vehicle.',
-      student: 'Rafi Maulana',
-      lecturer: 'Dr. Budi Santoso',
-      className: 'Trimatra',
-      classCode: 'TR301',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/ToyCar/glTF-Binary/ToyCar.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tr-astro',
-      title: 'Figure in Space',
-      description: 'Silhouette, scale, and spatial presence.',
-      student: 'Dewi Anggraini',
-      lecturer: 'Dr. Budi Santoso',
-      className: 'Trimatra',
-      classCode: 'TR301',
-      period: 'Odd 2026/2027',
-      modelUrl: MS + 'Astronaut.glb',
-      thumbnail: '',
-      sample: true
-    }
-  ].map((item, i) => ({ ...item, createdAt: Date.now() - (i + 1) * 86400000 }));
+function makePlaqueCanvas(item) {
+  const W = 384, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d');
 
-  /* ---------- Local storage helpers (LOCAL mode) ---------- */
-  function loadLocalItems() {
-    try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          // Refresh demo entries after a code update, but keep real user uploads.
-          const userItems = parsed.filter(item => !item.sample);
-          const refreshed = CFG.SHOW_SAMPLES
-            ? userItems.concat(SAMPLE_ITEMS)
-            : userItems;
-          try { saveLocalItems(refreshed); } catch (e) { /* keep usable in memory */ }
-          return refreshed;
-        }
-      }
-    } catch (e) {
-      console.warn('Could not read archive from localStorage', e);
-    }
-    const seed = CFG.SHOW_SAMPLES ? SAMPLE_ITEMS : [];
-    try { saveLocalItems(seed); } catch (e) { /* ignore */ }
-    return seed.slice();
-  }
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#e7e5df';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, W - 3, H - 3);
 
-  function saveLocalItems(items) {
-    localStorage.setItem(STORE_KEY, JSON.stringify(items)); // may throw on quota
-  }
+  ctx.fillStyle = '#c8553d';
+  ctx.font = 'bold 14px -apple-system, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText((item.classCode || '').toUpperCase(), 18, 30);
 
-  function openDB() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-  async function idb(mode, fn) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(DB_STORE, mode);
-      const req = fn(tx.objectStore(DB_STORE));
-      tx.oncomplete = () => { db.close(); resolve(req && req.result); };
-      tx.onerror = () => { db.close(); reject(tx.error); };
-      tx.onabort = () => { db.close(); reject(tx.error); };
-    });
-  }
-  const putModel = (id, blob) => idb('readwrite', s => s.put(blob, id));
-  const getModel = id => idb('readonly', s => s.get(id));
-  const deleteModel = id => idb('readwrite', s => s.delete(id));
+  ctx.fillStyle = '#1b1b1a';
+  ctx.font = 'bold 24px Georgia, serif';
+  ctx.fillText(clamp(ctx, item.title || 'Untitled', W - 36), 18, 62);
 
-  /* ---------- Supabase helpers (CLOUD mode) ---------- */
-  function sbHeaders(extra = {}) {
-    const h = { apikey: CFG.SUPABASE_ANON_KEY, ...extra };
-    // Legacy anon keys are JWTs and may also be sent as a bearer token.
-    // The newer "publishable" keys must only go in the apikey header.
-    if (CFG.SUPABASE_ANON_KEY.startsWith('eyJ')) h.Authorization = 'Bearer ' + CFG.SUPABASE_ANON_KEY;
-    return h;
-  }
+  ctx.font = 'bold 15px -apple-system, sans-serif';
+  ctx.fillText(clamp(ctx, item.student || '', W - 36), 18, 92);
 
-  const publicUrl = path => `${SB_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+  ctx.fillStyle = '#5d5d58';
+  ctx.font = '13px -apple-system, sans-serif';
+  ctx.fillText(clamp(ctx, item.lecturer || '', W - 36), 18, 112);
 
-    // ★ CHANGED: aborts the fetch after 8 s instead of waiting for the browser
-  async function fetchRemoteItems() {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-    try {
-      const res = await fetch(
-        `${SB_URL}/rest/v1/artworks?select=*&order=created_at.desc`,
-        { headers: sbHeaders(), signal: controller.signal }
-      );
-      if (!res.ok) throw new Error(`Could not load the shared archive (${res.status})`);
-      const rows = await res.json();
-      return rows.map(r => ({
-        id: r.id,
-        title: r.title,
-        description: r.description,
-        student: r.student,
-        lecturer: r.lecturer,
-        className: r.class_name,
-        classCode: r.class_code,
-        period: r.period,
-        modelUrl: r.model_url,
-        thumbnail: r.thumbnail_url,
-        createdAt: Date.parse(r.created_at) || 0,
-        remote: true
-      }));
-    } catch (e) {
-      if (e.name === 'AbortError') {
-        throw new Error('The shared archive took too long to respond.');
-      }
-      throw e;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
+  ctx.strokeStyle = '#e7e5df';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(18, 128);
+  ctx.lineTo(W - 18, 128);
+  ctx.stroke();
 
-  // XHR (not fetch) so we can show upload progress on slow mobile connections
-  function xhrUpload(path, blob, contentType, onProgress) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${SB_URL}/storage/v1/object/${BUCKET}/${path}`);
-      const headers = sbHeaders({ 'Content-Type': contentType, 'x-upsert': 'false', 'cache-control': 'max-age=31536000' });
-      Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
-      xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
-      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
-        ? resolve()
-        : reject(new Error(`Upload failed (${xhr.status}). ${xhr.responseText || ''}`.slice(0, 200)));
-      xhr.onerror = () => reject(new Error('Network error while uploading. Check your connection and try again.'));
-      xhr.send(blob);
-    });
-  }
+  ctx.fillStyle = '#5d5d58';
+  ctx.font = '12px -apple-system, sans-serif';
 
-    // ★ CHANGED: caches the result and accepts forceFresh
-  async function loadAll(forceFresh = false) {
-    if (!forceFresh && itemsCache && Date.now() - itemsCacheTime < ITEMS_CACHE_TTL) {
-      return itemsCache;
-    }
-    let list;
-    if (!CLOUD) {
-      list = loadLocalItems();
+  const words = String(item.description || '').split(/\s+/);
+  let line = '', y = 148;
+
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+
+    if (ctx.measureText(test).width > W - 36) {
+      if (line) ctx.fillText(line, 18, y);
+      line = word;
+      y += 16;
+      if (y > 190) break;
     } else {
-      try {
-        list = await fetchRemoteItems();
-        lastLoadError = '';
-      } catch (e) {
-        console.error(e);
-        lastLoadError = e.message || 'unknown error';
-        toast('Could not reach the shared archive. Showing samples only.');
-        list = [];
-      }
-      if (CFG.SHOW_SAMPLES) list = list.concat(SAMPLE_ITEMS);
+      line = test;
     }
-    itemsCache = list;
-    itemsCacheTime = Date.now();
-    return list;
   }
 
-  /* ---------- Small utilities ---------- */
-  const $ = (sel, root = document) => root.querySelector(sel);
+  if (line && y <= 190) ctx.fillText(line, 18, y);
 
-  function el(tag, attrs = {}, ...children) {
-    const node = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs)) {
-      if (k === 'class') node.className = v;
-      else if (k === 'text') node.textContent = v;
-      else node.setAttribute(k, v);
-    }
-    children.forEach(c => c && node.append(c));
-    return node;
+  ctx.fillStyle = '#1b1b1a';
+  ctx.fillRect(0, H - 42, W, 42);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 14px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('TAP TO OPEN IN AR →', W / 2, H - 16);
+
+  return c;
+}
+
+function clamp(ctx, text, maxWidth) {
+  text = String(text);
+  if (ctx.measureText(text).width <= maxWidth) return text;
+
+  let cut = text;
+  while (cut.length > 1 && ctx.measureText(cut + '…').width > maxWidth) {
+    cut = cut.slice(0, -1);
+  }
+  return cut + '…';
+}
+
+/* ---------- Procedural textures (tiny canvases, generated once) ---------- */
+
+// Wall: white at the top fading to soft grey at the floor line (fake ambient occlusion).
+function makeWallGradientTexture() {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.5, '#f4f4f6');
+  g.addColorStop(1, '#dddde0');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 256);
+
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// Floor: light grey with a fine 1 m grid and slightly stronger 2 m lines.
+// One tile covers 2 m x 2 m.
+function makeFloorGridTexture(maxAnisotropy) {
+  const S = 512;
+  const c = document.createElement('canvas');
+  c.width = S;
+  c.height = S;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = '#dadade';
+  ctx.fillRect(0, 0, S, S);
+
+  /* minor line (1 m)
+  ctx.strokeStyle = 'rgba(110, 110, 122, 0.20)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(S / 2, 0); ctx.lineTo(S / 2, S);
+  ctx.moveTo(0, S / 2); ctx.lineTo(S, S / 2);
+  ctx.stroke(); */
+
+  // major line (2 m) on the tile edge
+  ctx.strokeStyle = 'rgba(138, 138, 149, 0.34)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(0, 0, S, S);
+
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = maxAnisotropy || 1;
+  return t;
+}
+
+// Soft contact shadow placed under each pedestal. Works on mobile where real shadows are off.
+function makeBlobTexture() {
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = S;
+  c.height = S;
+  const ctx = c.getContext('2d');
+
+  const g = ctx.createRadialGradient(
+    S / 2, S / 2, 0,
+    S / 2, S / 2, S / 2
+  );
+
+  g.addColorStop(0, 'rgba(0, 0, 0, 0.18)');
+  g.addColorStop(0.5, 'rgba(0, 0, 0, 0.06)');
+  g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+
+  return new THREE.CanvasTexture(c);
+}
+
+export class ArchitecturalGallery {
+  constructor(containerEl, onSelectArtwork) {
+    this.container = containerEl;
+    this.onSelectArtwork = onSelectArtwork || null;
+    this.onReady = null;
+    this.onProgress = null;
+
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
+    this.classes = [];
+    this.plan = null;
+    this.walkRects = [];
+
+    this.playerPos = [0, 0];
+    this.playerYaw = 0;
+    this.playerPitch = 0; // Vertical look angle in radians.
+
+    this.isDragging = false;
+    this.dragDistance = 0;
+    this.previousMousePosition = { x: 0, y: 0 };
+    this.keys = new Set();
+    this.raycaster = null;
+    this.pointer = null;
+    this.joystick = { active: false, dx: 0, dy: 0 };
+
+    this._running = true;
+    this._controller = null;
+    this._blobUrls = [];
+    this.isTransitioning = false;
+    this._generation = 0;
+    this._resizeHandler = null;
+    this._visibilityHandler = null;
+    this._resizeObserver = null;
+    this._pageHidden = document.hidden;
+    this._lastPixelRatio = 0;
   }
 
-  function toast(message) {
-    let t = $('#toast');
-    if (!t) {
-      t = el('div', { id: 'toast', class: 'toast', role: 'status' });
-      document.body.append(t);
-    }
-    t.textContent = message;
-    requestAnimationFrame(() => t.classList.add('show'));
-    clearTimeout(toast._t);
-    toast._t = setTimeout(() => t.classList.remove('show'), 3600);
-  }
+  async init() {
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0xf4f4f6);
+    this.scene.fog = new THREE.FogExp2(0xf4f4f6, 0.009);
 
-  const norm = s => (s || '').toString().toLowerCase().trim();
-  const uniqueSorted = arr => [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  const initials = s => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-  const newId = () => (window.crypto && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+    const width = Math.max(1, this.container.clientWidth);
+    const height = Math.max(1, this.container.clientHeight);
 
-  /* ==========================================================
-     GALLERY PAGE
-     ========================================================== */
-  async function initGallery() {
-    let items = [];
-    const state = { q: '', code: '', period: '' };
+    this.camera = new THREE.PerspectiveCamera(
+      60, width / height, 0.1, 1000
+    );
 
-    const grid = $('#gallery');
-    const empty = $('#emptyState');
-    const count = $('#resultCount');
-    const searchInput = $('#searchInput');
-    const classFilter = $('#classFilter');
-    const periodFilter = $('#periodFilter');
+    const isSmallScreen = window.matchMedia('(max-width: 767px)').matches;
+    this._isSmallScreen = isSmallScreen;
 
-    const sorted = () => items.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-    function fillSelect(select, values, allLabel) {
-      const current = select.value;
-      select.replaceChildren(el('option', { value: '', text: allLabel }));
-      values.forEach(v => select.append(el('option', { value: v, text: v })));
-      select.value = values.includes(current) ? current : '';
-    }
-
-    function refreshFilterOptions() {
-      fillSelect(classFilter, uniqueSorted(items.map(i => i.classCode)), 'All class codes');
-      fillSelect(periodFilter, uniqueSorted(items.map(i => i.period)), 'All periods');
-      state.code = classFilter.value;
-      state.period = periodFilter.value;
-    }
-
-    function matches(item) {
-      if (state.code && item.classCode !== state.code) return false;
-      if (state.period && item.period !== state.period) return false;
-      if (state.q) {
-        const hay = [item.student, item.lecturer, item.title, item.className].map(norm).join(' | ');
-        if (!hay.includes(norm(state.q))) return false;
-      }
-      return true;
-    }
-
-    function buildCard(item, index) {
-      const thumb = el('div', { class: 'card-thumb' });
-      thumb.append(el('div', { class: 'placeholder', 'aria-hidden': 'true', text: initials(item.title) }));
-      if (item.thumbnail) {
-        const img = el('img', { src: item.thumbnail, alt: `Preview of ${item.title}`, loading: 'lazy' });
-        img.addEventListener('error', () => img.remove());
-        thumb.append(img);
-      }
-      thumb.append(el('span', { class: 'badge-ar', text: '3D · AR' }));
-
-      const body = el('div', { class: 'card-body' },
-        el('span', { class: 'card-code', text: item.classCode }),
-        el('h3', { class: 'card-title', text: item.title }),
-        (() => { const p = el('p', { class: 'card-meta' }); p.append(el('strong', { text: item.student })); return p; })(),
-        el('p', { class: 'card-meta', text: item.lecturer })
-      );
-
-      const card = el('article', {
-        class: 'card', tabindex: '0', role: 'button',
-        'aria-label': `Open ${item.title} by ${item.student}`,
-        'data-id': item.id
-      }, thumb, body);
-      card.style.animationDelay = `${Math.min(index, 12) * 40}ms`;
-
-      const open = () => openDetail(item.id);
-      card.addEventListener('click', open);
-      card.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
-      });
-      return card;
-    }
-
-    function render() {
-      const list = sorted().filter(matches);
-      grid.replaceChildren(...list.map(buildCard));
-      empty.hidden = list.length > 0;
-      const total = items.length;
-      const source = !CLOUD
-        ? ' · THIS DEVICE ONLY (config.js has no Supabase keys)'
-        : lastLoadError
-          ? ` · SHARED ARCHIVE ERROR: ${lastLoadError}`
-          : ' · shared archive connected';
-      count.textContent = (list.length === total
-        ? `${total} artwork${total === 1 ? '' : 's'}`
-        : `${list.length} of ${total} artworks`) + source;
-    }
-
-    /* ----- Events ----- */
-    searchInput.addEventListener('input', () => { state.q = searchInput.value; render(); });
-    classFilter.addEventListener('change', () => { state.code = classFilter.value; render(); });
-    periodFilter.addEventListener('change', () => { state.period = periodFilter.value; render(); });
-    $('#resetFilters').addEventListener('click', () => {
-      searchInput.value = ''; classFilter.value = ''; periodFilter.value = '';
-      state.q = state.code = state.period = '';
-      render();
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: !isSmallScreen && window.devicePixelRatio <= 1.5,
+      powerPreference: isSmallScreen ? 'low-power' : 'high-performance',
+      alpha: false,
+      stencil: false
     });
 
-    /* ----- Detail view ----- */
-    const modal = $('#detailModal');
-    const host = $('#viewerHost');
-    const deleteBtn = $('#deleteBtn');
-    let activeBlobUrl = null;
-    let lastFocus = null;
-    let currentId = null;
+    this._lastPixelRatio = Math.min(
+      window.devicePixelRatio || 1,
+      isSmallScreen ? 1.25 : 1.5
+    );
 
-    async function openDetail(id) {
-      const item = items.find(i => i.id === id);
-      if (!item) return;
+    this.renderer.setPixelRatio(this._lastPixelRatio);
+    this.renderer.setSize(width, height);
+    
+    // Disable real-time directional shadows for softer, better performance.
+    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-      let src = item.modelUrl;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
 
-      if (!src) {
-        try {
-          const blob = await getModel(item.id);
-          if (!blob) throw new Error('Model file missing');
-          activeBlobUrl = URL.createObjectURL(blob);
-          src = activeBlobUrl;
-        } catch (e) {
-          console.error(e);
-          toast('Could not load this model file from the browser.');
-          return;
-        }
-      }
+    this.container.appendChild(this.renderer.domElement);
 
-      // Scene Viewer (Android) needs a public https URL, so blob: URLs skip it.
-      const arModes = src.startsWith('blob:') ? 'webxr quick-look' : 'scene-viewer webxr quick-look';
+    // Soft ambient illumination throughout the gallery.
+    this.scene.add(
+      new THREE.HemisphereLight(0xf7f8ff, 0xe2ded8, 0.85)
+    );
 
-      currentId = id;
-      lastFocus = document.activeElement;
+    this.scene.add(
+      new THREE.AmbientLight(0xffffff, 0.42)
+    );
 
-      $('#detailClass').textContent = item.className;
-      $('#detailTitle').textContent = item.title;
-      $('#detailDesc').textContent = item.description || 'No description provided.';
-      $('#detailStudent').textContent = item.student;
-      $('#detailLecturer').textContent = item.lecturer;
-      $('#detailCode').textContent = item.classCode;
-      $('#detailPeriod').textContent = item.period;
-      // Only locally stored uploads can be deleted from the page
-      deleteBtn.hidden = !!(item.sample || item.remote);
+    // No directional sun or directional key light.
+    this.keyLight = null;
 
-      host.replaceChildren();
-      const loading = el('div', { class: 'viewer-loading', text: 'Loading 3D model…' });
-      const mv = document.createElement('model-viewer');
-      mv.setAttribute('src', src);
-      mv.setAttribute('alt', `3D model: ${item.title} by ${item.student}`);
-      mv.setAttribute('camera-controls', '');
-      mv.setAttribute('touch-action', 'pan-y');
-      mv.setAttribute('auto-rotate', '');
-      mv.setAttribute('shadow-intensity', '1');
-      mv.setAttribute('environment-image', 'neutral');
-      mv.setAttribute('exposure', '1');
-      mv.setAttribute('ar', '');
-      mv.setAttribute('ar-modes', arModes);
-      mv.setAttribute('ar-scale', 'auto');
-      if (item.thumbnail) mv.setAttribute('poster', item.thumbnail);
 
-      const arBtn = el('button', { slot: 'ar-button', class: 'btn-ar', type: 'button', text: 'View in AR' });
-      mv.append(arBtn);
-
-      mv.addEventListener('load', () => loading.classList.add('done'));
-      mv.addEventListener('error', () => { loading.textContent = 'Sorry, this model could not be loaded.'; });
-
-      host.append(mv, loading);
-
-      modal.hidden = false;
-      document.body.classList.add('modal-open');
-      $('.modal-close', modal).focus();
+    try {
+      await this.loadDataAndBuild();
+    } catch (error) {
+      console.error('3D gallery build failed', error);
+      throw error; // Let index.html display the real failure instead of hiding it.
     }
 
-    // ★ NEW: let the 3D gallery open the same detail modal by id
-    window.openArchiveDetail = id => {
-      if (modal.hidden) openDetail(id);
+    this._resizeHandler = () => this.onWindowResize();
+    window.addEventListener('resize', this._resizeHandler, {
+      passive: true
+    });
+
+    if (typeof ResizeObserver !== 'undefined') {
+      this._resizeObserver = new ResizeObserver(this._resizeHandler);
+      this._resizeObserver.observe(this.container);
+    }
+
+    this._visibilityHandler = () => {
+      this._pageHidden = document.hidden;
+      if (!this._pageHidden && this._running) this.animate();
     };
 
-    function closeDetail() {
-      modal.hidden = true;
-      document.body.classList.remove('modal-open');
-      host.replaceChildren();
-      if (activeBlobUrl) { URL.revokeObjectURL(activeBlobUrl); activeBlobUrl = null; }
-      currentId = null;
-      if (lastFocus && lastFocus.focus) lastFocus.focus();
+    document.addEventListener(
+      'visibilitychange',
+      this._visibilityHandler
+    );
+
+    this.setupControls();
+    this.setupJoystick();
+    this.animate();
+
+    if (this.onReady) this.onReady();
+  }
+
+  async loadItems() {
+    const loadPromise = (async () => {
+      if (
+        window.arArchive &&
+        typeof window.arArchive.loadAll === 'function'
+      ) {
+        let items = await window.arArchive.loadAll();
+
+        if (items.length > MAX_ARTWORKS_3D) {
+          console.warn(
+            `3D view capped to ${MAX_ARTWORKS_3D} / ${items.length} artworks`
+          );
+          items = items.slice(0, MAX_ARTWORKS_3D);
+        }
+
+        const pending = items.filter(
+          item => !item.modelUrl && window.arArchive.getModel
+        );
+
+        await Promise.all(pending.map(async item => {
+          try {
+            const blob = await window.arArchive.getModel(item.id);
+
+            if (blob) {
+              const url = URL.createObjectURL(blob);
+              this._blobUrls.push(url);
+              item.modelUrl = url;
+            }
+          } catch (error) {
+            console.warn('Blob load failed', item.id, error);
+          }
+        }));
+
+        return items;
+      }
+
+      try {
+        const raw = localStorage.getItem('arArchive.items.v1');
+        if (raw) return JSON.parse(raw);
+      } catch {
+        // Ignore unavailable or invalid local storage.
+      }
+
+      return [];
+    })();
+
+    const timeout = new Promise(resolve =>
+      setTimeout(() => resolve(null), 6000)
+    );
+
+    const items = await Promise.race([loadPromise, timeout]);
+
+    if (!items || !items.length) {
+      return [
+        {
+          title: 'Astronaut Study',
+          student: 'Alya Putri',
+          lecturer: 'Dr. Budi Santoso',
+          className: 'Typography II',
+          classCode: 'DK202',
+          modelUrl:
+            'https://modelviewer.dev/shared-assets/models/Astronaut.glb'
+        },
+        {
+          title: 'Expressive Robot',
+          student: 'Rizky Pratama',
+          lecturer: 'Maya Anggraini',
+          className: 'Character Design I',
+          classCode: 'DK115',
+          modelUrl:
+            'https://modelviewer.dev/shared-assets/models/RobotExpressive.glb'
+        }
+      ];
     }
 
-    modal.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeDetail(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeDetail(); });
+    return items;
+  }
 
-    deleteBtn.addEventListener('click', async () => {
-      const item = items.find(i => i.id === currentId);
-      if (!item || item.sample || item.remote) return;
-      if (!confirm(`Delete “${item.title}” from the archive? This can't be undone.`)) return;
-      items = items.filter(i => i.id !== item.id);
-      try { saveLocalItems(items.filter(i => !i.sample || CFG.SHOW_SAMPLES)); await deleteModel(item.id); } catch (e) { console.warn(e); }
-      closeDetail();
-      refreshFilterOptions();
-      render();
-      toast('Artwork deleted');
+  async loadDataAndBuild() {
+    const start = performance.now();
+    const items = await this.loadItems();
+
+    console.log(
+      `[gallery] items loaded: ${items.length} in ` +
+      `${(performance.now() - start).toFixed(0)}ms`
+    );
+
+    this.classes = groupByClass(items);
+
+    if (!this.classes.length) {
+      this.plan = { entries: [], corridors: [] };
+      this.walkRects = [];
+      return;
+    }
+
+    this.plan = bestPlan(this.classes.map(c => c.items.length));
+    this.walkRects = walkRects(this.plan);
+
+    this.fitShadowCamera();
+    await this.buildMuseumGeometry();
+
+    const startRoom = this.plan.entries.find(
+      entry => entry.role === 'main' && entry.ci === 0
+    );
+
+    if (startRoom) {
+      this.playerPos = [
+        startRoom.P[0],
+        startRoom.P[1] + startRoom.D / 2 - 2.5
+      ];
+      this.playerYaw = startRoom.yaw + Math.PI;
+    }
+
+    console.log(
+      `[gallery] build complete in ` +
+      `${(performance.now() - start).toFixed(0)}ms; ` +
+      `meshes: ${this.countMeshes()}`
+    );
+  }
+
+  fitShadowCamera() {
+    /*
+    let x0 = Infinity, x1 = -Infinity;
+    let z0 = Infinity, z1 = -Infinity;
+
+    for (const entry of this.plan.entries) {
+      x0 = Math.min(x0, entry.P[0] - entry.W / 2);
+      x1 = Math.max(x1, entry.P[0] + entry.W / 2);
+      z0 = Math.min(z0, entry.P[1] - entry.D / 2);
+      z1 = Math.max(z1, entry.P[1] + entry.D / 2);
+    }
+
+    if (!Number.isFinite(x0)) return;
+
+    const cx = (x0 + x1) / 2;
+    const cz = (z0 + z1) / 2;
+    const span = Math.max(x1 - x0, z1 - z0) + 20;
+    const camera = this.keyLight.shadow.camera;
+
+    camera.left = -span / 2;
+    camera.right = span / 2;
+    camera.top = span / 2;
+    camera.bottom = -span / 2;
+    camera.updateProjectionMatrix();
+
+    this.keyLight.position.set(cx + 24, 40, cz + 22);
+    this.keyLight.target.position.set(cx, 0, cz);
+    this.scene.add(this.keyLight.target);
+    */
+  }
+
+  countMeshes() {
+    let count = 0;
+    this.scene.traverse(object => {
+      if (object.isMesh) count++;
     });
+    return count;
+  }
 
-    /* ----- Init ----- */
-    count.textContent = 'Loading archive…';
-    items = await loadAll();
-    refreshFilterOptions();
-    render();
+  async buildMuseumGeometry() {
+    const H = 9;
+    const total = this.plan.entries.length;
 
-    const params = new URLSearchParams(location.search);
-    const added = params.get('added');
-    if (added) {
-      toast(added === 'shared' ? 'Saved to the SHARED archive ✓'
-        : added === 'local' ? 'Saved on THIS DEVICE only (shared mode is off)'
-        : 'Added to the archive (old upload page: not saved to Supabase)');
-      history.replaceState(null, '', location.pathname);
+    const FLOOR_TILE = 2; // metres covered by one grid texture tile
+
+    const wallMat = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      map: makeWallGradientTexture()
+    });
+    const floorMat = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      map: makeFloorGridTexture(
+        Math.min(4, this.renderer.capabilities.getMaxAnisotropy())
+      )
+    });
+    const ceilMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const pedestalMat = new THREE.MeshLambertMaterial({ color: 0xfbfaf7 });
+    const stripMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    // Shared by every pedestal (contact shadow)
+    this._blob = {
+      geo: new THREE.PlaneGeometry(3, 3),
+      mat: new THREE.MeshBasicMaterial({
+        map: makeBlobTexture(),
+        transparent: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2
+      })
+    };
+
+    const ceilingGeo = new THREE.PlaneGeometry(1, 1);
+    const plaqueGeo = new THREE.PlaneGeometry(PLAQUE_W, PLAQUE_H);
+    const signGeo = new THREE.PlaneGeometry(3.2, 0.8);
+    const pedestalGeo = new THREE.BoxGeometry(1.2, 1.1, 1.2);
+
+    const signTextures = new Map();
+    const plaqueTextures = new Map();
+    const modelQueue = [];
+
+    for (let i = 0; i < total; i++) {
+      const entry = this.plan.entries[i];
+      const cls = this.classes[entry.ci];
+      if (!cls) continue;
+
+      const room = new THREE.Group();
+      room.position.set(entry.P[0], 0, entry.P[1]);
+      room.rotation.y = entry.yaw;
+
+      // Per-room floor so the grid tiles at a true 1 m scale whatever the room size
+      const floorGeo = new THREE.PlaneGeometry(entry.W, entry.D);
+      const floorUV = floorGeo.attributes.uv;
+      for (let u = 0; u < floorUV.count; u++) {
+        floorUV.setXY(
+          u,
+          floorUV.getX(u) * entry.W / FLOOR_TILE,
+          floorUV.getY(u) * entry.D / FLOOR_TILE
+        );
+      }
+      floorUV.needsUpdate = true;
+
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      room.add(floor);
+
+      // Ceiling
+      const ceiling = new THREE.Mesh(ceilingGeo, ceilMat);
+      ceiling.scale.set(entry.W, entry.D, 1);
+      ceiling.rotation.x = Math.PI / 2;
+      ceiling.position.y = H;
+      room.add(ceiling);
+
+      // One warm light at the center of this room's ceiling.
+      const ceilingLight = new THREE.PointLight(
+        0xfff4e6,                     // Warm white
+        38,                            // Light intensity
+        Math.max(entry.W, entry.D) * 2.8,
+        1.7                            // Light falloff
+      );
+
+      ceilingLight.position.set(0, H - 0.35, 0);
+      ceilingLight.castShadow = false;
+      room.add(ceilingLight);
+
+      // Visible ceiling panel where the light comes from.
+      const lightPanel = new THREE.Mesh(
+        new THREE.PlaneGeometry(
+          Math.min(2.4, entry.W * 0.28),
+          Math.min(2.4, entry.D * 0.18)
+        ),
+        new THREE.MeshBasicMaterial({
+          color: 0xfff7e9,
+          transparent: true,
+          opacity: 0.92,
+          side: THREE.DoubleSide
+        })
+      );
+
+      lightPanel.rotation.x = Math.PI / 2;
+      lightPanel.position.set(0, H - 0.025, 0);
+      room.add(lightPanel);
+
+      this.buildWalls(room, entry, H, wallMat);
+
+      this.createSign(
+        room, entry, cls.code, cls.name, true, signGeo, signTextures
+      );
+
+      this.createSign(
+        room, entry, cls.code, cls.name, false, signGeo, signTextures
+      );
+
+      const slots = artSlots(entry, cls.items.length);
+
+      cls.items.forEach((art, index) => {
+        const slot = slots[index];
+        if (!slot) return;
+
+        this.createPedestal(
+          room, slot, art, pedestalGeo, pedestalMat,
+          plaqueGeo, plaqueTextures, modelQueue
+        );
+      });
+
+      this.scene.add(room);
+
+      if (this.onProgress) {
+        this.onProgress(
+          (i + 1) / (total + 1),
+          `Building room ${i + 1} / ${total}…`
+        );
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    if (modelQueue.length) {
+      this._loadModelsInBackground(modelQueue);
+    }
+
+    if (this.onProgress) this.onProgress(1, 'Ready');
+  }
+
+  _loadModelsInBackground(queue) {
+    const generation = this._generation;
+    let cursor = 0;
+
+    const worker = async () => {
+      while (cursor < queue.length) {
+        if (this._generation !== generation) return;
+
+        const task = queue[cursor++];
+        let success = false;
+
+        try {
+          success = await Promise.race([
+            this.loadModel(task.group, task.art),
+            new Promise(resolve =>
+              setTimeout(() => resolve(false), 12000)
+            )
+          ]);
+        } catch (error) {
+          console.warn('[gallery] model error', error);
+        }
+
+        if (this._generation !== generation) return;
+        if (!success) this._addFallback(task.group);
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    };
+
+    for (
+      let i = 0;
+      i < Math.min(CONCURRENT_MODELS, queue.length);
+      i++
+    ) {
+      worker();
     }
   }
 
-  /* ==========================================================
-     UPLOAD PAGE
-     ========================================================== */
-  function initUpload() {
-    const form = $('#uploadForm');
-    const fileInput = $('#modelFile');
-    const previewBox = $('#previewBox');
-    const viewer = $('#previewViewer');
-    const errorBox = $('#formError');
-    const submitBtn = $('#submitBtn');
-    const modeNote = $('#modeNote');
+  _addFallback(group) {
+    if (group.userData._hasFallback) return;
+    group.userData._hasFallback = true;
 
-    let previewUrl = null;
-    let modelReady = false;
+    const fallback = new THREE.Mesh(
+      new THREE.SphereGeometry(0.3, 12, 12),
+      new THREE.MeshLambertMaterial({ color: 0x1b1b1a })
+    );
 
-    if (modeNote) {
-      modeNote.textContent = `${BUILD} · ` + (CLOUD
-        ? 'Shared archive: your upload will be visible on every device.'
-        : 'This-device mode: uploads are only visible in this browser until the shared archive is set up.');
+    fallback.position.y = 1.5;
+    group.add(fallback);
+  }
+
+  // Make the wall gradient run in world height, so wall segments and door lintels line up.
+  _mapWallV(geometry, yCenter, totalHeight) {
+    const pos = geometry.attributes.position;
+    const uv = geometry.attributes.uv;
+
+    for (let i = 0; i < pos.count; i++) {
+      uv.setY(
+        i,
+        THREE.MathUtils.clamp((pos.getY(i) + yCenter) / totalHeight, 0, 1)
+      );
     }
 
-    // Suggest periods already used in the archive
-    const dl = $('#periodSuggestions');
-    loadAll().then(list => {
-      uniqueSorted(list.map(i => i.period)).forEach(p => dl.append(el('option', { value: p })));
-    }).catch(() => {});
+    uv.needsUpdate = true;
+  }
 
-    function showError(msg) {
-      errorBox.textContent = msg;
-      errorBox.hidden = !msg;
-      if (msg) errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  buildWalls(group, entry, height, material) {
+    const { W, D, exit } = entry;
+    const halfW = W / 2;
+    const halfD = D / 2;
+    const thickness = WALL_T;
+    const doorHeight = 5;
+    const doorWidth = DOOR_W;
+
+    const segment = (x0, z0, x1, z1) => {
+      const length = Math.hypot(x1 - x0, z1 - z0);
+      if (length < 0.01) return;
+
+      const horizontal = Math.abs(z1 - z0) < 1e-4;
+      const geometry = horizontal
+        ? new THREE.BoxGeometry(length, height, thickness)
+        : new THREE.BoxGeometry(thickness, height, length);
+
+      this._mapWallV(geometry, height / 2, height);
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(
+        (x0 + x1) / 2,
+        height / 2,
+        (z0 + z1) / 2
+      );
+      mesh.castShadow = true;
+      group.add(mesh);
+    };
+
+    const wallWithDoor = (x0, z0, x1, z1, doorFraction) => {
+      const length = Math.hypot(x1 - x0, z1 - z0);
+      if (length < 0.1) return;
+
+      // Use the true wall midpoint as the origin. doorFraction offsets only
+      // the doorway; it must not shift the entire wall (which caused gaps).
+      const mx = (x0 + x1) / 2;
+      const mz = (z0 + z1) / 2;
+      const dx = (x1 - x0) / length;
+      const dz = (z1 - z0) / length;
+      const horizontal = Math.abs(z1 - z0) < 1e-4;
+
+      // Keep the opening safely inside the wall, including at room corners.
+      const archWidth = Math.min(doorWidth, length * 0.7);
+      const halfArch = archWidth / 2;
+      const maxDoorOffset = Math.max(0, length / 2 - halfArch - 0.05);
+      const doorOffset = THREE.MathUtils.clamp(
+        (doorFraction - 0.5) * length,
+        -maxDoorOffset,
+        maxDoorOffset
+      );
+
+      const springY = doorHeight * 0.68;
+      const apexY = doorHeight;
+
+      // Pointed arch profile: high at the center and lower at both jambs.
+      // The exponent produces a distinctly pointed peak rather than a round arch.
+      const archY = x => {
+        const u = THREE.MathUtils.clamp(Math.abs(x) / halfArch, 0, 1);
+        return springY + (apexY - springY) * Math.pow(1 - u, 0.62);
+      };
+
+      // Add a wall box using coordinates measured along the wall from its midpoint.
+      const addWallBox = (alongCenter, spanLength, yBottom, yTop) => {
+        if (spanLength < 0.015 || yTop - yBottom < 0.015) return;
+
+        const yHeight = yTop - yBottom;
+        const geometry = horizontal
+          ? new THREE.BoxGeometry(spanLength, yHeight, thickness)
+          : new THREE.BoxGeometry(thickness, yHeight, spanLength);
+
+        this._mapWallV(geometry, (yBottom + yTop) / 2, height);
+
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(
+          mx + dx * alongCenter,
+          (yBottom + yTop) / 2,
+          mz + dz * alongCenter
+        );
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      };
+
+      // Full-height wall sections on either side of the doorway.
+      const wallStart = -length / 2;
+      const wallEnd = length / 2;
+      const openingLeft = doorOffset - halfArch;
+      const openingRight = doorOffset + halfArch;
+
+      addWallBox(
+        (wallStart + openingLeft) / 2,
+        openingLeft - wallStart,
+        0,
+        height
+      );
+      addWallBox(
+        (openingRight + wallEnd) / 2,
+        wallEnd - openingRight,
+        0,
+        height
+      );
+
+      // Fill the wall ABOVE the curved opening with narrow vertical sections.
+      // This avoids fragile concave ExtrudeGeometry triangulation and leaves
+      // a real walk-through opening with its point facing upward.
+      const slices = 32;
+      for (let i = 0; i < slices; i++) {
+        const xA = -halfArch + (archWidth * i) / slices;
+        const xB = -halfArch + (archWidth * (i + 1)) / slices;
+        const localCenter = (xA + xB) / 2;
+        // Start each slice at the lower endpoint height so tiny gaps cannot show.
+        const yBottom = Math.min(archY(xA), archY(xB));
+        addWallBox(
+          doorOffset + localCenter,
+          xB - xA + 0.006,
+          yBottom,
+          height
+        );
+      }
+    };
+
+
+    wallWithDoor(-halfW, halfD, halfW, halfD, 0.5);
+
+    if (exit.side === 'N') {
+      wallWithDoor(
+        -halfW, -halfD, halfW, -halfD,
+        0.5 + exit.pos[0] / W
+      );
+    } else if (exit.side === 'W') {
+      wallWithDoor(
+        -halfW, -halfD, -halfW, halfD,
+        0.5 + exit.pos[1] / D
+      );
+    } else {
+      wallWithDoor(
+        halfW, -halfD, halfW, halfD,
+        0.5 + exit.pos[1] / D
+      );
     }
 
-    fileInput.addEventListener('change', () => {
-      showError('');
-      modelReady = false;
-      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
-      const file = fileInput.files[0];
-      if (!file) { previewBox.hidden = true; return; }
+    if (exit.side !== 'N') {
+      segment(-halfW, -halfD, halfW, -halfD);
+    }
 
-      if (!/\.glb$/i.test(file.name)) {
-        fileInput.value = ''; previewBox.hidden = true;
-        showError('Please choose a .glb file (export as GLB from Scaniverse).');
-        return;
-      }
-      if (file.size > MAX_FILE_MB * 1024 * 1024) {
-        fileInput.value = ''; previewBox.hidden = true;
-        showError(`That file is larger than ${MAX_FILE_MB} MB. Try exporting at a lower quality.`);
-        return;
-      }
-      previewUrl = URL.createObjectURL(file);
-      viewer.setAttribute('src', previewUrl);
-      previewBox.hidden = false;
+    if (exit.side !== 'W') {
+      segment(-halfW, -halfD, -halfW, halfD);
+    }
+
+    if (exit.side !== 'E') {
+      segment(halfW, -halfD, halfW, halfD);
+    }
+  }
+
+  createSign(group, entry, code, name, isEntrance, geometry, cache) {
+    const key = `${code}-${isEntrance ? 'in' : 'out'}`;
+
+    if (!cache.has(key)) {
+      const texture = new THREE.CanvasTexture(
+        makeSignCanvas(code, name, isEntrance)
+      );
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = 2;
+      cache.set(key, texture);
+    }
+
+    const material = new THREE.MeshBasicMaterial({
+      map: cache.get(key)
     });
 
-    // ★ NEW: free the preview blob URL when the page unloads
-    window.addEventListener('beforeunload', () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    });
+    const sign = new THREE.Mesh(geometry, material);
 
-    viewer.addEventListener('load', () => { modelReady = true; });
-    viewer.addEventListener('error', () => {
-      modelReady = false;
-      showError('This file could not be read as a valid .glb model.');
-    });
+    if (isEntrance) {
+      sign.position.set(0, 3.65, entry.D / 2 - 0.08);
+      sign.rotation.y = Math.PI;
+    } else {
+      const exit = entry.exit;
 
-    const waitForModel = (timeout = 8000) => new Promise(resolve => {
-      const start = Date.now();
-      (function check() {
-        if (modelReady || Date.now() - start > timeout) return resolve(modelReady);
-        setTimeout(check, 100);
-      })();
-    });
-
-    // Capture the preview canvas and shrink it to a small JPEG for the card
-    async function captureThumbnail() {
-      try {
-        if (!(await waitForModel())) return '';
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-        const dataUrl = await viewer.toDataURL('image/jpeg', 0.85);
-        const img = await new Promise((res, rej) => {
-          const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl;
-        });
-        const max = 560;
-        const scale = Math.min(1, max / Math.max(img.width, img.height));
-        const c = document.createElement('canvas');
-        c.width = Math.round(img.width * scale);
-        c.height = Math.round(img.height * scale);
-        const ctx = c.getContext('2d');
-        ctx.fillStyle = '#ece8de';
-        ctx.fillRect(0, 0, c.width, c.height);
-        ctx.drawImage(img, 0, 0, c.width, c.height);
-        return c.toDataURL('image/jpeg', 0.75);
-      } catch (e) {
-        console.warn('Thumbnail capture failed', e);
-        return '';
+      if (exit.side === 'N') {
+        sign.position.set(
+          exit.pos[0], 3.65, -entry.D / 2 + 0.08
+        );
+        sign.rotation.y = 0;
+      } else if (exit.side === 'W') {
+        sign.position.set(
+          -entry.W / 2 + 0.08, 3.65, exit.pos[1]
+        );
+        sign.rotation.y = Math.PI / 2;
+      } else {
+        sign.position.set(
+          entry.W / 2 - 0.08, 3.65, exit.pos[1]
+        );
+        sign.rotation.y = -Math.PI / 2;
       }
     }
 
-    async function saveToCloud(file, fields, thumbnail) {
-      const id = newId();
-      const modelPath = `models/${id}.glb`;
-      const thumbPath = `thumbs/${id}.jpg`;
+    group.add(sign);
+  }
 
-      await xhrUpload(modelPath, file, 'model/gltf-binary', p => {
-        submitBtn.textContent = `Uploading ${Math.round(p * 100)}%`;
-      });
+  createPedestal(
+    group, slot, art, pedestalGeometry, pedestalMaterial,
+    plaqueGeometry, plaqueCache, modelQueue
+  ) {
+    const pedestalGroup = new THREE.Group();
+    pedestalGroup.position.set(slot.x, 0, slot.z);
+    pedestalGroup.rotation.y = slot.yaw;
+    pedestalGroup.userData = { art };
 
-      let thumbnailUrl = '';
-      if (thumbnail) {
-        try {
-          submitBtn.textContent = 'Saving thumbnail…';
-          const thumbBlob = await (await fetch(thumbnail)).blob();
-          await xhrUpload(thumbPath, thumbBlob, 'image/jpeg');
-          thumbnailUrl = publicUrl(thumbPath);
-        } catch (e) {
-          console.warn('Thumbnail upload failed, continuing without it', e);
+    const pedestal = new THREE.Mesh(
+      pedestalGeometry, pedestalMaterial
+    );
+    pedestal.position.y = 0.55;
+    pedestal.castShadow = true;
+    pedestal.receiveShadow = true;
+    pedestalGroup.add(pedestal);
+
+    // Soft contact shadow on the floor (not clickable, so it never opens the artwork)
+    const blob = new THREE.Mesh(this._blob.geo, this._blob.mat);
+    blob.rotation.x = -Math.PI / 2;
+    blob.position.y = 0.012;
+    blob.renderOrder = 1;
+    blob.raycast = () => {};
+    pedestalGroup.add(blob);
+
+    const key = art.id || art.title || Math.random().toString(36);
+
+    if (!plaqueCache.has(key)) {
+      const texture = new THREE.CanvasTexture(makePlaqueCanvas(art));
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = 2;
+      plaqueCache.set(key, texture);
+    }
+
+    const plaque = new THREE.Mesh(
+      plaqueGeometry,
+      new THREE.MeshBasicMaterial({ map: plaqueCache.get(key) })
+    );
+
+    plaque.position.set(0, 0.65, 0.61);
+    pedestalGroup.add(plaque);
+
+    modelQueue.push({ group: pedestalGroup, art });
+    group.add(pedestalGroup);
+  }
+
+  loadModel(group, art) {
+    const generation = this._generation;
+
+    return new Promise(resolve => {
+      const loader = new GLTFLoader();
+      const url = art.modelUrl ||
+        'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
+
+      loader.load(
+        url,
+        gltf => {
+          if (this._generation !== generation) {
+            resolve(false);
+            return;
+          }
+
+          try {
+            const model = gltf.scene;
+            model.updateMatrixWorld(true);
+
+            const box = new THREE.Box3().setFromObject(model);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+
+            const maxDimension = Math.max(size.x, size.y, size.z);
+
+            if (maxDimension > 0) {
+              model.scale.setScalar(1 / maxDimension);
+            }
+
+            const scaledBox = new THREE.Box3().setFromObject(model);
+            const center = new THREE.Vector3();
+            scaledBox.getCenter(center);
+
+            model.position.set(
+              -center.x,
+              1.1 - scaledBox.min.y,
+              -center.z
+            );
+
+            model.traverse(object => {
+              if (object.isMesh) object.castShadow = true;
+            });
+
+            group.add(model);
+            resolve(true);
+          } catch (error) {
+            console.error('[gallery] model processing failed', error);
+            resolve(false);
+          }
+        },
+        undefined,
+        () => resolve(false)
+      );
+    });
+  }
+
+  computePath(fromIndex, toIndex) {
+    const entries = this.plan.entries;
+    if (fromIndex === toIndex) return [this.playerPos];
+
+    const entranceOf = entry =>
+      worldOf(entry.P, entry.yaw, [0, entry.D / 2]);
+
+    const exitOf = entry =>
+      worldOf(entry.P, entry.yaw, entry.exit.pos);
+
+    const points = [this.playerPos.slice()];
+
+    if (fromIndex < toIndex) {
+      points.push(exitOf(entries[fromIndex]));
+
+      for (let k = fromIndex; k < toIndex; k++) {
+        points.push(entranceOf(entries[k + 1]));
+
+        if (k + 1 < toIndex) {
+          points.push(exitOf(entries[k + 1]));
         }
       }
 
-      submitBtn.textContent = 'Publishing…';
-      const res = await fetch(`${SB_URL}/rest/v1/artworks`, {
-        method: 'POST',
-        headers: sbHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
-        body: JSON.stringify({
-          id,
-          title: fields.title,
-          description: fields.description,
-          student: fields.student,
-          lecturer: fields.lecturer,
-          class_name: fields.className,
-          class_code: fields.classCode,
-          period: fields.period,
-          model_url: publicUrl(modelPath),
-          thumbnail_url: thumbnailUrl
-        })
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`Could not save the artwork details (${res.status}). ${txt}`.slice(0, 220));
+      points.push([
+        entries[toIndex].P[0],
+        entries[toIndex].P[1]
+      ]);
+    } else {
+      points.push(entranceOf(entries[fromIndex]));
+
+      for (let k = fromIndex - 1; k >= toIndex; k--) {
+        points.push(exitOf(entries[k]));
+
+        if (k > toIndex) {
+          points.push(entranceOf(entries[k]));
+        }
       }
 
-      // Confirm the row really exists in Supabase before reporting success
-      const check = await fetch(`${SB_URL}/rest/v1/artworks?id=eq.${id}&select=id`, { headers: sbHeaders() });
-      const rows = check.ok ? await check.json() : [];
-      if (!rows.length) {
-        throw new Error('The artwork was sent but could not be read back from Supabase. Check the "public read artworks" policy.');
-      }
+      points.push([
+        entries[toIndex].P[0],
+        entries[toIndex].P[1]
+      ]);
     }
 
-    async function saveLocally(file, fields, thumbnail) {
-      const id = 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-      await putModel(id, file);
-      const items = loadLocalItems();
-      items.push({ id, ...fields, thumbnail, fileName: file.name, createdAt: Date.now() });
-      try {
-        saveLocalItems(items);
-      } catch (quotaErr) {
-        await deleteModel(id).catch(() => {});
-        throw new Error('Browser storage is full. Delete some uploaded artworks and try again.');
-      }
-      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-    }
-
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      showError('');
-
-      let firstBad = null;
-      form.querySelectorAll('[required]').forEach(field => {
-        const bad = field.type === 'file' ? !field.files.length : !field.value.trim();
-        field.classList.toggle('input-invalid', bad);
-        if (bad && !firstBad) firstBad = field;
-      });
-      if (firstBad) {
-        firstBad.focus();
-        showError('Please fill in all required fields and choose a .glb file.');
-        return;
-      }
-
-      const file = fileInput.files[0];
-      const fd = new FormData(form);
-      const fields = {
-        title: fd.get('title').trim(),
-        description: fd.get('description').trim(),
-        student: fd.get('student').trim(),
-        lecturer: fd.get('lecturer').trim(),
-        className: fd.get('className').trim(),
-        classCode: fd.get('classCode').trim().toUpperCase(),
-        period: fd.get('period').trim()
-      };
-
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Preparing…';
-
-      try {
-        const thumbnail = await captureThumbnail();
-        if (CLOUD) await saveToCloud(file, fields, thumbnail);
-        else await saveLocally(file, fields, thumbnail);
-        location.href = `index.html?added=${CLOUD ? 'shared' : 'local'}`;
-      } catch (err) {
-        console.error(err);
-        showError(err.message || 'Something went wrong while saving. Please try again.');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Save to archive';
-      }
-    });
-
-    form.addEventListener('input', e => e.target.classList.remove('input-invalid'));
+    return points;
   }
 
-  /* ---------- Boot ---------- */
+  get currentEntryIdx() {
+    for (let i = 0; i < this.plan.entries.length; i++) {
+      const entry = this.plan.entries[i];
+      const halfW = entry.W / 2;
+      const halfD = entry.D / 2;
+      const dx = this.playerPos[0] - entry.P[0];
+      const dz = this.playerPos[1] - entry.P[1];
+      const c = Math.cos(-entry.yaw);
+      const s = Math.sin(-entry.yaw);
+      const lx = dx * c + dz * s;
+      const lz = -dx * s + dz * c;
 
-  // ★ NEW: expose archive helpers to the 3D gallery module (gallery.js)
-  window.arArchive = {
-    loadAll,
-    getModel,
-    isCloud: CLOUD
-  };
+      if (
+        Math.abs(lx) <= halfW + 1 &&
+        Math.abs(lz) <= halfD + 1
+      ) {
+        return i;
+      }
+    }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const tag = $('.site-footer p');
-    if (tag) tag.append(` (${BUILD}, ${CLOUD ? 'shared' : 'local'} mode)`);
-    const page = document.body.dataset.page;
-    if (page === 'gallery') initGallery();
-    if (page === 'upload') initUpload();
-  });
-})();
+    return -1;
+  }
+
+  jumpToClass(classIndex) {
+    if (this.isTransitioning) return;
+
+    const targetIndex = this.plan.entries.findIndex(
+      entry => entry.role === 'main' && entry.ci === classIndex
+    );
+
+    if (targetIndex < 0) return;
+
+    const fromIndex = this.currentEntryIdx;
+    const waypoints = fromIndex >= 0
+      ? this.computePath(fromIndex, targetIndex)
+      : [
+          [this.playerPos[0], this.playerPos[1]],
+          [
+            this.plan.entries[targetIndex].P[0],
+            this.plan.entries[targetIndex].P[1]
+          ]
+        ];
+
+    if (waypoints.length < 2) return;
+
+    const lengths = [];
+    let totalLength = 0;
+
+    for (let i = 1; i < waypoints.length; i++) {
+      const length = Math.hypot(
+        waypoints[i][0] - waypoints[i - 1][0],
+        waypoints[i][1] - waypoints[i - 1][1]
+      );
+      lengths.push(length);
+      totalLength += length;
+    }
+
+    const startYaw = this.playerYaw;
+    const targetYaw = this.plan.entries[targetIndex].yaw + Math.PI;
+    let yawDelta = targetYaw - startYaw;
+
+    while (yawDelta > Math.PI) yawDelta -= 2 * Math.PI;
+    while (yawDelta < -Math.PI) yawDelta += 2 * Math.PI;
+
+    this.isTransitioning = true;
+    this.keys.clear();
+    this.joystick.dx = this.joystick.dy = 0;
+
+    const duration = Math.min(3500, Math.max(900, totalLength * 45));
+    const startTime = performance.now();
+
+    const step = () => {
+      const t = Math.min(1, (performance.now() - startTime) / duration);
+      const eased = t * t * (3 - 2 * t);
+      const targetDistance = eased * totalLength;
+
+      let accumulated = 0;
+      let segmentIndex = lengths.length - 1;
+
+      for (let i = 0; i < lengths.length; i++) {
+        if (accumulated + lengths[i] >= targetDistance) {
+          segmentIndex = i;
+          break;
+        }
+        accumulated += lengths[i];
+      }
+
+      const segmentT = lengths[segmentIndex] > 0
+        ? (targetDistance - accumulated) / lengths[segmentIndex]
+        : 0;
+
+      const p0 = waypoints[segmentIndex];
+      const p1 = waypoints[segmentIndex + 1] || p0;
+
+      this.playerPos = [
+        p0[0] + (p1[0] - p0[0]) * segmentT,
+        p0[1] + (p1[1] - p0[1]) * segmentT
+      ];
+
+      this.playerYaw = startYaw + yawDelta * eased;
+
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        this.isTransitioning = false;
+      }
+    };
+
+    requestAnimationFrame(step);
+  }
+
+  checkLoopTeleport() {
+    const entries = this.plan.entries;
+    if (!entries.length) return;
+
+    const pre = entries.find(entry => entry.role === 'pre');
+    const post = entries.find(entry => entry.role === 'post');
+    if (!pre || !post) return;
+
+    const inside = entry => {
+      const halfW = entry.W / 2;
+      const halfD = entry.D / 2;
+      const dx = this.playerPos[0] - entry.P[0];
+      const dz = this.playerPos[1] - entry.P[1];
+      const c = Math.cos(-entry.yaw);
+      const s = Math.sin(-entry.yaw);
+      const lx = dx * c + dz * s;
+      const lz = -dx * s + dz * c;
+
+      return (
+        Math.abs(lx) <= halfW - 0.3 &&
+        Math.abs(lz) <= halfD - 0.3
+      );
+    };
+
+    if (inside(pre)) {
+      const lastMain = entries.find(
+        entry => entry.role === 'main' &&
+          entry.ci === this.classes.length - 1
+      );
+      if (lastMain) this.teleportBetween(pre, lastMain);
+    } else if (inside(post)) {
+      const firstMain = entries.find(
+        entry => entry.role === 'main' && entry.ci === 0
+      );
+      if (firstMain) this.teleportBetween(post, firstMain);
+    }
+  }
+
+  teleportBetween(fromEntry, toEntry) {
+    const local = rot(
+      [
+        this.playerPos[0] - fromEntry.P[0],
+        this.playerPos[1] - fromEntry.P[1]
+      ],
+      -fromEntry.yaw
+    );
+
+    const world = rot(local, toEntry.yaw);
+
+    this.playerPos = [
+      toEntry.P[0] + world[0],
+      toEntry.P[1] + world[1]
+    ];
+
+    this.playerYaw += toEntry.yaw - fromEntry.yaw;
+  }
+
+  setupControls() {
+    this._controller = new AbortController();
+    const signal = this._controller.signal;
+
+    this.raycaster = new THREE.Raycaster();
+    this.pointer = new THREE.Vector2();
+
+    const moveKeys = [
+      'w', 'a', 's', 'd',
+      'arrowup', 'arrowdown', 'arrowleft', 'arrowright'
+    ];
+
+    window.addEventListener('keydown', event => {
+      const key = event.key.toLowerCase();
+
+      if (moveKeys.includes(key)) {
+        this.keys.add(key);
+        event.preventDefault();
+      }
+    }, { signal });
+
+    window.addEventListener('keyup', event => {
+      this.keys.delete(event.key.toLowerCase());
+    }, { signal });
+
+    this.container.addEventListener('mousedown', event => {
+      if (this.isTransitioning) return;
+
+      this.isDragging = true;
+      this.dragDistance = 0;
+      this.previousMousePosition = {
+        x: event.clientX,
+        y: event.clientY
+      };
+    }, { signal });
+
+    window.addEventListener('mousemove', event => {
+      if (!this.isDragging) return;
+
+      const dx = event.clientX - this.previousMousePosition.x;
+      const dy = event.clientY - this.previousMousePosition.y;
+      this.dragDistance += Math.abs(dx) + Math.abs(dy);
+      this.playerYaw -= dx * 0.005;
+      this.playerPitch = THREE.MathUtils.clamp(
+        this.playerPitch - dy * 0.005,
+        -1.35,
+        1.35
+      );
+
+      this.previousMousePosition = {
+        x: event.clientX,
+        y: event.clientY
+      };
+    }, { signal });
+
+    window.addEventListener('mouseup', () => {
+      this.isDragging = false;
+    }, { signal });
+
+    this.container.addEventListener('touchstart', event => {
+      if (this.isTransitioning || event.touches.length !== 1) return;
+
+      this.isDragging = true;
+      this.dragDistance = 0;
+      this.previousMousePosition = {
+        x: event.touches[0].clientX,
+        y: event.touches[0].clientY
+      };
+    }, { signal, passive: true });
+
+    window.addEventListener('touchmove', event => {
+      if (!this.isDragging || event.touches.length !== 1) return;
+
+      const dx = event.touches[0].clientX -
+        this.previousMousePosition.x;
+      const dy = event.touches[0].clientY -
+        this.previousMousePosition.y;
+
+      this.dragDistance += Math.abs(dx) + Math.abs(dy);
+      this.playerYaw -= dx * 0.005;
+      this.playerPitch = THREE.MathUtils.clamp(
+        this.playerPitch - dy * 0.005,
+        -1.35,
+        1.35
+      );
+
+      this.previousMousePosition = {
+        x: event.touches[0].clientX,
+        y: event.touches[0].clientY
+      };
+    }, { signal, passive: true });
+
+    const endTouch = () => {
+      this.isDragging = false;
+    };
+
+    window.addEventListener('touchend', endTouch, { signal });
+    window.addEventListener('touchcancel', endTouch, { signal });
+
+    this.container.addEventListener('click', event => {
+      if (this.dragDistance > 6 || this.isTransitioning) return;
+
+      const rect = this.renderer.domElement.getBoundingClientRect();
+
+      this.pointer.x =
+        ((event.clientX - rect.left) / rect.width) * 2 - 1;
+
+      this.pointer.y =
+        -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+
+      const hits = this.raycaster.intersectObjects(
+        this.scene.children, true
+      );
+
+      for (const hit of hits) {
+        let node = hit.object;
+
+        while (node) {
+          if (node.userData && node.userData.art) {
+            if (this.onSelectArtwork) {
+              this.onSelectArtwork(node.userData.art);
+            }
+            return;
+          }
+
+          node = node.parent;
+        }
+
+        break;
+      }
+    }, { signal });
+  }
+
+  setupJoystick() {
+    const joystick = document.getElementById('joystick');
+    const knob = joystick &&
+      joystick.querySelector('.joystick-knob');
+
+    if (!joystick || !knob) return;
+
+    this._controller = this._controller || new AbortController();
+    const signal = this._controller.signal;
+    const maxRadius = 42;
+
+    const update = event => {
+      const rect = joystick.getBoundingClientRect();
+
+      let dx = event.clientX - (rect.left + rect.width / 2);
+      let dy = event.clientY - (rect.top + rect.height / 2);
+
+      const distance = Math.hypot(dx, dy);
+
+      if (distance > maxRadius) {
+        dx = dx / distance * maxRadius;
+        dy = dy / distance * maxRadius;
+      }
+
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      this.joystick.dx = dx / maxRadius;
+      this.joystick.dy = dy / maxRadius;
+    };
+
+    joystick.addEventListener('pointerdown', event => {
+      if (this.isTransitioning) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      this.joystick.active = true;
+      joystick.setPointerCapture(event.pointerId);
+      update(event);
+    }, { signal });
+
+    joystick.addEventListener('pointermove', event => {
+      if (!this.joystick.active) return;
+      event.preventDefault();
+      update(event);
+    }, { signal });
+
+    const end = () => {
+      this.joystick.active = false;
+      this.joystick.dx = this.joystick.dy = 0;
+      knob.style.transform = 'translate(0, 0)';
+    };
+
+    joystick.addEventListener('pointerup', end, { signal });
+    joystick.addEventListener('pointercancel', end, { signal });
+  }
+
+  onWindowResize() {
+    if (!this.renderer || !this.camera || !this.container) return;
+
+    const width = Math.max(1, this.container.clientWidth);
+    const height = Math.max(1, this.container.clientHeight);
+
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(width, height, false);
+
+    const ratio = Math.min(
+      window.devicePixelRatio || 1,
+      this._isSmallScreen ? 1.25 : 1.5
+    );
+
+    if (ratio !== this._lastPixelRatio) {
+      this.renderer.setPixelRatio(ratio);
+      this._lastPixelRatio = ratio;
+    }
+  }
+
+  canWalk(x, z) {
+    for (const rect of this.walkRects) {
+      if (
+        x >= rect.x0 && x <= rect.x1 &&
+        z >= rect.z0 && z <= rect.z1
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  animate() {
+    if (!this._running || !this.renderer || this._pageHidden) return;
+
+    requestAnimationFrame(() => this.animate());
+
+    const sinYaw = Math.sin(this.playerYaw);
+    const cosYaw = Math.cos(this.playerYaw);
+
+    const forward = [-sinYaw, -cosYaw];
+    const right = [cosYaw, -sinYaw];
+
+    let mx = 0, mz = 0;
+
+    if (!this.isTransitioning) {
+      if (this.keys.has('w') || this.keys.has('arrowup')) {
+        mx += forward[0];
+        mz += forward[1];
+      }
+
+      if (this.keys.has('s') || this.keys.has('arrowdown')) {
+        mx -= forward[0];
+        mz -= forward[1];
+      }
+
+      if (this.keys.has('a') || this.keys.has('arrowleft')) {
+        mx -= right[0];
+        mz -= right[1];
+      }
+
+      if (this.keys.has('d') || this.keys.has('arrowright')) {
+        mx += right[0];
+        mz += right[1];
+      }
+
+      if (this.joystick.dx || this.joystick.dy) {
+        const jx = this.joystick.dx;
+        const jy = -this.joystick.dy;
+
+        mx += forward[0] * jy + right[0] * jx;
+        mz += forward[1] * jy + right[1] * jx;
+      }
+
+      if (mx || mz) {
+        const length = Math.hypot(mx, mz);
+        const speed = 0.08;
+
+        const nx = this.playerPos[0] + mx / length * speed;
+        const nz = this.playerPos[1] + mz / length * speed;
+
+        if (this.canWalk(nx, nz)) {
+          this.playerPos = [nx, nz];
+        } else if (this.canWalk(nx, this.playerPos[1])) {
+          this.playerPos = [nx, this.playerPos[1]];
+        } else if (this.canWalk(this.playerPos[0], nz)) {
+          this.playerPos = [this.playerPos[0], nz];
+        }
+
+        this.checkLoopTeleport();
+      }
+    }
+
+    this.camera.position.set(
+      this.playerPos[0], 1.7, this.playerPos[1]
+    );
+
+    const pitchCos = Math.cos(this.playerPitch);
+    const pitchSin = Math.sin(this.playerPitch);
+    this.camera.lookAt(
+      this.camera.position.x + forward[0] * pitchCos,
+      this.camera.position.y + pitchSin,
+      this.camera.position.z + forward[1] * pitchCos
+    );
+
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  pause() {
+    this._running = false;
+  }
+
+  resume() {
+    if (this._running) return;
+
+    this._running = true;
+
+    if (!this._pageHidden) this.animate();
+  }
+
+  dispose() {
+    this._generation++;
+    this._running = false;
+
+    if (this._controller) {
+      this._controller.abort();
+      this._controller = null;
+    }
+
+    if (this._resizeHandler) {
+      window.removeEventListener('resize', this._resizeHandler);
+    }
+
+    if (this._visibilityHandler) {
+      document.removeEventListener(
+        'visibilitychange', this._visibilityHandler
+      );
+    }
+
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+
+    this._resizeHandler = null;
+    this._visibilityHandler = null;
+
+    this._blobUrls.forEach(url => URL.revokeObjectURL(url));
+    this._blobUrls = [];
+
+    if (this.scene) {
+      this.scene.traverse(object => {
+        if (!object.isMesh) return;
+
+        if (object.geometry) object.geometry.dispose();
+
+        const materials = Array.isArray(object.material)
+          ? object.material
+          : [object.material];
+
+        materials.forEach(material => {
+          if (!material) return;
+          if (material.map) material.map.dispose();
+          material.dispose();
+        });
+      });
+    }
+
+    if (this.renderer) {
+      this.renderer.dispose();
+
+      const canvas = this.renderer.domElement;
+      if (canvas && canvas.parentNode) {
+        canvas.parentNode.removeChild(canvas);
+      }
+    }
+
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
+  }
+}
