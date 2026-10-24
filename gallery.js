@@ -153,8 +153,8 @@ function makeWallGradientTexture() {
 
   const g = ctx.createLinearGradient(0, 0, 0, 256);
   g.addColorStop(0, '#ffffff');
-  g.addColorStop(0.5, '#f4f4f6');
-  g.addColorStop(1, '#dddde0');
+  g.addColorStop(0.5, '#fcfaf5');
+  g.addColorStop(1, '#e5ddc4');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 4, 256);
 
@@ -582,7 +582,7 @@ export class ArchitecturalGallery {
       // One warm light at the center of this room's ceiling.
       const ceilingLight = new THREE.PointLight(
         0xfff4e6,                     // Warm white
-        38,                            // Light intensity
+        67,                            // Light intensity
         Math.max(entry.W, entry.D) * 2.8,
         1.7                            // Light falloff
       );
