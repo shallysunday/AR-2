@@ -111,6 +111,77 @@ function clamp(ctx, text, maxWidth) {
   return cut + '…';
 }
 
+/* ---------- Procedural textures (tiny canvases, generated once) ---------- */
+
+// Wall: white at the top fading to soft grey at the floor line (fake ambient occlusion).
+function makeWallGradientTexture() {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.5, '#f4f4f6');
+  g.addColorStop(1, '#b9b9c0');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 256);
+
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// Floor: light grey with a fine 1 m grid and slightly stronger 2 m lines.
+// One tile covers 2 m x 2 m.
+function makeFloorGridTexture(maxAnisotropy) {
+  const S = 512;
+  const c = document.createElement('canvas');
+  c.width = S;
+  c.height = S;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = '#dadade';
+  ctx.fillRect(0, 0, S, S);
+
+  // minor line (1 m)
+  ctx.strokeStyle = 'rgba(110, 110, 122, 0.20)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(S / 2, 0); ctx.lineTo(S / 2, S);
+  ctx.moveTo(0, S / 2); ctx.lineTo(S, S / 2);
+  ctx.stroke();
+
+  // major line (2 m) on the tile edge
+  ctx.strokeStyle = 'rgba(90, 90, 102, 0.34)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(0, 0, S, S);
+
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = maxAnisotropy || 1;
+  return t;
+}
+
+// Soft contact shadow placed under each pedestal. Works on mobile where real shadows are off.
+function makeBlobTexture() {
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = S;
+  c.height = S;
+  const ctx = c.getContext('2d');
+
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
+  g.addColorStop(0.5, 'rgba(0, 0, 0, 0.22)');
+  g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+
+  return new THREE.CanvasTexture(c);
+}
+
 export class ArchitecturalGallery {
   constructor(containerEl, onSelectArtwork) {
     this.container = containerEl;
@@ -152,7 +223,7 @@ export class ArchitecturalGallery {
   async init() {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf4f4f6);
-    this.scene.fog = new THREE.FogExp2(0xf4f4f6, 0.006);
+    this.scene.fog = new THREE.FogExp2(0xf4f4f6, 0.009);
 
     const width = Math.max(1, this.container.clientWidth);
     const height = Math.max(1, this.container.clientHeight);
@@ -181,25 +252,32 @@ export class ArchitecturalGallery {
     this.renderer.shadowMap.enabled = !isSmallScreen;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.0;
 
     this.container.appendChild(this.renderer.domElement);
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xdddddd, 0.55));
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+    // Lighting: cool sky / warm ground bounce + warm key sun + cool fill.
+    // Only the key light casts shadows, so the cost stays low.
+    this.scene.add(new THREE.HemisphereLight(0xf4f7ff, 0xd9d4cb, 0.75));
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.12));
 
-    const key = new THREE.DirectionalLight(0xfff3e0, 1.2);
+    const key = new THREE.DirectionalLight(0xfff1dc, 1.35);
     key.position.set(24, 40, 22);
     key.castShadow = !isSmallScreen;
     key.shadow.mapSize.set(
-      isSmallScreen ? 512 : 1024,
-      isSmallScreen ? 512 : 1024
+      isSmallScreen ? 512 : 2048,
+      isSmallScreen ? 512 : 2048
     );
-    key.shadow.bias = -0.0005;
+    key.shadow.bias = -0.0004;
+    key.shadow.normalBias = 0.03;
     key.shadow.camera.far = 300;
 
     this.scene.add(key);
     this.keyLight = key;
+
+    const fill = new THREE.DirectionalLight(0xdfe9ff, 0.4);
+    fill.position.set(-26, 22, -18);
+    this.scene.add(fill);
 
     try {
       await this.loadDataAndBuild();
@@ -396,12 +474,35 @@ export class ArchitecturalGallery {
     const H = 8;
     const total = this.plan.entries.length;
 
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-    const floorMat = new THREE.MeshLambertMaterial({ color: 0xe9e7e2 });
-    const ceilMat = new THREE.MeshLambertMaterial({ color: 0xfbfaf7 });
-    const pedestalMat = new THREE.MeshLambertMaterial({ color: 0xfbfaf7 });
+    const FLOOR_TILE = 2; // metres covered by one grid texture tile
 
-    const floorGeo = new THREE.PlaneGeometry(1, 1);
+    const wallMat = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      map: makeWallGradientTexture()
+    });
+    const floorMat = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      map: makeFloorGridTexture(
+        Math.min(4, this.renderer.capabilities.getMaxAnisotropy())
+      )
+    });
+    const ceilMat = new THREE.MeshLambertMaterial({ color: 0xf6f6f8 });
+    const pedestalMat = new THREE.MeshLambertMaterial({ color: 0xfbfaf7 });
+    const stripMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    // Shared by every pedestal (contact shadow)
+    this._blob = {
+      geo: new THREE.PlaneGeometry(3, 3),
+      mat: new THREE.MeshBasicMaterial({
+        map: makeBlobTexture(),
+        transparent: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2
+      })
+    };
+
     const ceilingGeo = new THREE.PlaneGeometry(1, 1);
     const plaqueGeo = new THREE.PlaneGeometry(PLAQUE_W, PLAQUE_H);
     const signGeo = new THREE.PlaneGeometry(3.2, 0.8);
@@ -420,8 +521,19 @@ export class ArchitecturalGallery {
       room.position.set(entry.P[0], 0, entry.P[1]);
       room.rotation.y = entry.yaw;
 
+      // Per-room floor so the grid tiles at a true 1 m scale whatever the room size
+      const floorGeo = new THREE.PlaneGeometry(entry.W, entry.D);
+      const floorUV = floorGeo.attributes.uv;
+      for (let u = 0; u < floorUV.count; u++) {
+        floorUV.setXY(
+          u,
+          floorUV.getX(u) * entry.W / FLOOR_TILE,
+          floorUV.getY(u) * entry.D / FLOOR_TILE
+        );
+      }
+      floorUV.needsUpdate = true;
+
       const floor = new THREE.Mesh(floorGeo, floorMat);
-      floor.scale.set(entry.W, entry.D, 1);
       floor.rotation.x = -Math.PI / 2;
       floor.receiveShadow = true;
       room.add(floor);
@@ -431,6 +543,15 @@ export class ArchitecturalGallery {
       ceiling.rotation.x = Math.PI / 2;
       ceiling.position.y = H;
       room.add(ceiling);
+
+      // Two glowing light strips so the room reads as lit from above
+      for (const sx of [-0.25, 0.25]) {
+        const strip = new THREE.Mesh(ceilingGeo, stripMat);
+        strip.scale.set(0.3, entry.D * 0.7, 1);
+        strip.rotation.x = Math.PI / 2;
+        strip.position.set(entry.W * sx, H - 0.02, 0);
+        room.add(strip);
+      }
 
       this.buildWalls(room, entry, H, wallMat);
 
@@ -524,6 +645,21 @@ export class ArchitecturalGallery {
     group.add(fallback);
   }
 
+  // Make the wall gradient run in world height, so wall segments and door lintels line up.
+  _mapWallV(geometry, yCenter, totalHeight) {
+    const pos = geometry.attributes.position;
+    const uv = geometry.attributes.uv;
+
+    for (let i = 0; i < pos.count; i++) {
+      uv.setY(
+        i,
+        THREE.MathUtils.clamp((pos.getY(i) + yCenter) / totalHeight, 0, 1)
+      );
+    }
+
+    uv.needsUpdate = true;
+  }
+
   buildWalls(group, entry, height, material) {
     const { W, D, exit } = entry;
     const halfW = W / 2;
@@ -540,6 +676,8 @@ export class ArchitecturalGallery {
       const geometry = horizontal
         ? new THREE.BoxGeometry(length, height, thickness)
         : new THREE.BoxGeometry(thickness, height, length);
+
+      this._mapWallV(geometry, height / 2, height);
 
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(
@@ -581,6 +719,12 @@ export class ArchitecturalGallery {
         : new THREE.BoxGeometry(
             thickness, height - doorHeight, doorWidth
           );
+
+      this._mapWallV(
+        geometry,
+        doorHeight + (height - doorHeight) / 2,
+        height
+      );
 
       const lintel = new THREE.Mesh(geometry, material);
       lintel.position.set(
@@ -685,6 +829,14 @@ export class ArchitecturalGallery {
     pedestal.castShadow = true;
     pedestal.receiveShadow = true;
     pedestalGroup.add(pedestal);
+
+    // Soft contact shadow on the floor (not clickable, so it never opens the artwork)
+    const blob = new THREE.Mesh(this._blob.geo, this._blob.mat);
+    blob.rotation.x = -Math.PI / 2;
+    blob.position.y = 0.012;
+    blob.renderOrder = 1;
+    blob.raycast = () => {};
+    pedestalGroup.add(blob);
 
     const key = art.id || art.title || Math.random().toString(36);
 
