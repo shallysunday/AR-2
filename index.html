@@ -32,7 +32,7 @@
       <nav class="nav">
         <button type="button" id="btn-grid-view" class="btn btn-primary active-tab">Archive Grid</button>
         <button type="button" id="btn-gallery-view" class="btn btn-ghost">3D Gallery</button>
-        <a class="btn btn-primary" href="upload.html?v=4">+ Add artwork</a>
+        <a class="btn btn-primary" href="upload.html?v=5">+ Add artwork</a>
       </nav>
     </div>
   </header>
@@ -122,11 +122,11 @@
     </div>
   </div>
 
-  <script src="config.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="config.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 
   <script type="module">
-    import { ArchitecturalGallery } from './gallery.js';
+    import { ArchitecturalGallery } from './gallery.js?v=5';
 
     const gridView = document.getElementById('grid-view-container');
     const galleryView = document.getElementById('gallery-view-container');
