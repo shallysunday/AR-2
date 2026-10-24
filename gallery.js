@@ -719,32 +719,24 @@ export class ArchitecturalGallery {
 
       // Classic pointed arch dimensions.
       const archWidth = Math.min(doorWidth, length * 0.7);
-      const springY = doorHeight * 0.68;
-      const halfArch = archWidth / 2;
+      const springY   = doorHeight * 0.68;
+      const halfArch  = archWidth / 2;
 
-      // Draw the entire wall profile around the doorway.
-      // The arch-shaped notch remains genuinely open.
+      // Control height must be BELOW the apex, otherwise the Bezier
+      // overshoots and the apex becomes a dip (arch looks inverted).
+      const shoulderY = springY + (doorHeight - springY) * 0.4;
+
       const shape = new THREE.Shape();
 
       shape.moveTo(-length / 2, 0);
       shape.lineTo(-halfArch, 0);
       shape.lineTo(-halfArch, springY);
 
-      // Left curve rises toward the pointed apex.
-      shape.quadraticCurveTo(
-        -halfArch * 0.92,
-        doorHeight + 0.35,
-        0,
-        doorHeight
-      );
+      // Left half: rises to an upward-pointing apex.
+      shape.quadraticCurveTo(-halfArch * 0.6, shoulderY, 0, doorHeight);
 
-      // Right curve descends from the pointed apex.
-      shape.quadraticCurveTo(
-        halfArch * 0.92,
-        doorHeight + 0.35,
-        halfArch,
-        springY
-      );
+      // Right half: descends from the apex.
+      shape.quadraticCurveTo( halfArch * 0.6, shoulderY, halfArch, springY);
 
       shape.lineTo(halfArch, 0);
       shape.lineTo(length / 2, 0);
