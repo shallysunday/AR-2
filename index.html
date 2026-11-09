@@ -20,7 +20,7 @@
 </head>
 <body data-page="gallery">
 
-  <!-- Header matching the reference design -->
+  <!-- Header -->
   <header class="site-header">
     <div class="header-inner">
       <!-- Brand / Logo -->
@@ -56,16 +56,13 @@
 
   <section class="accordion-section">
     <div class="accordion-container" id="classAccordion">
-
       <!-- Card 01: Illustration -->
       <article class="accordion-card active" data-class-code="IL101" style="--card-color: #89E051;">
         <div class="card-bg" style="background-image: url('images/IL0.webp');"></div>
-        
         <div class="card-collapsed">
           <span class="vertical-title">ILUSTRASI DESAIN</span>
           <span class="card-num">01</span>
         </div>
-
         <div class="card-expanded">
           <span class="card-badge">2D Class</span>
           <h3 class="card-title">ILUSTRASI DESAIN</h3>
@@ -77,12 +74,10 @@
       <!-- Card 02: Photography -->
       <article class="accordion-card" data-class-code="PH101" style="--card-color: #E62B2B;">
         <div class="card-bg" style="background-image: url('images/PH1.webp');"></div>
-        
         <div class="card-collapsed">
           <span class="vertical-title">FOTOGRAFI</span>
           <span class="card-num">02</span>
         </div>
-
         <div class="card-expanded">
           <span class="card-badge">2D Class</span>
           <h3 class="card-title">FOTOGRAFI</h3>
@@ -94,12 +89,10 @@
       <!-- Card 03: Applied Typography -->
       <article class="accordion-card" data-class-code="AT201" style="--card-color: #FF75A0;">
         <div class="card-bg" style="background-image: url('images/AT0.webp');"></div>
-        
         <div class="card-collapsed">
           <span class="vertical-title">APPLIED TYPOGRAPHY</span>
           <span class="card-num">03</span>
         </div>
-
         <div class="card-expanded">
           <span class="card-badge">3D Class</span>
           <h3 class="card-title">APPLIED TYPOGRAPHY</h3>
@@ -111,12 +104,10 @@
       <!-- Card 04: Advertising Photography -->
       <article class="accordion-card" data-class-code="AP201" style="--card-color: #42E3C6;">
         <div class="card-bg" style="background-image: url('images/AP1.webp');"></div>
-        
         <div class="card-collapsed">
           <span class="vertical-title">ADVERTISING PHOTO</span>
           <span class="card-num">04</span>
         </div>
-
         <div class="card-expanded">
           <span class="card-badge">2D Class</span>
           <h3 class="card-title">ADVERTISING PHOTO</h3>
@@ -124,7 +115,6 @@
           <button type="button" class="btn-more">+ See More</button>
         </div>
       </article>
-
     </div>
   </section>
 
@@ -147,7 +137,6 @@
     </section>
 
     <p class="result-count" id="resultCount" aria-live="polite"></p>
-
     <section id="gallery" class="grid" aria-label="Archive gallery"></section>
 
     <div id="emptyState" class="empty" hidden>
@@ -157,15 +146,17 @@
   </main>
 
   <section id="gallery-view-container" style="display: none;">
+    <!-- HUD Control Bar with Class Warp Buttons -->
     <div class="gallery-hud">
-      <div class="hud-row">
+      <div class="hud-row hud-top">
         <span class="hud-instruction">
-          <strong>WASD</strong> walk · <strong>Drag left/right</strong> to turn · <strong>Drag up/down</strong> to look · <strong>Tap art</strong> to open
+          <strong>WASD / Joystick</strong> walk · <strong>Drag</strong> look around · <strong>Tap artwork</strong> inspect
         </span>
       </div>
-      <div class="hud-row">
-        <label for="class-jump-select" class="hud-label">Jump to class</label>
-        <select id="class-jump-select">
+      <div class="hud-row hud-warp">
+        <span class="hud-label">Warp to:</span>
+        <div id="class-warp-buttons" class="class-warp-buttons"></div>
+        <select id="class-jump-select" class="hud-select" aria-label="Jump to class room" hidden>
           <option value="">Select a room…</option>
         </select>
       </div>
@@ -196,7 +187,7 @@
       <button type="button" class="modal-close" data-close aria-label="Close detail view">×</button>
       <div class="viewer-wrap">
         <div id="viewerHost" class="viewer-host"></div>
-        <p class="viewer-hint">Drag to rotate · Pinch to zoom · AR on Android needs Google Play Services for AR and the Google app, both up to date</p>
+        <p class="viewer-hint">Drag to rotate · Pinch to zoom · AR on Android needs Google Play Services for AR and the Google app</p>
       </div>
       <div class="detail-info">
         <p class="eyebrow" id="detailClass"></p>
@@ -213,7 +204,7 @@
     </div>
   </div>
 
-  <!-- Student Profile Pop-up Modal -->
+  <!-- Student Profile Modal -->
   <div id="profileModal" class="modal" hidden>
     <div class="modal-backdrop" id="profileBackdrop"></div>
     <div class="modal-panel profile-panel" role="dialog" aria-modal="true" aria-labelledby="profileName">
@@ -269,13 +260,14 @@
   <script src="app.js?v=5"></script>
 
   <script type="module">
-    import { ArchitecturalGallery } from './gallery.js?v=5';
+    import { ArchitecturalGallery } from './gallery.js?v=6';
 
     const gridView = document.getElementById('grid-view-container');
     const galleryView = document.getElementById('gallery-view-container');
     const btnGrid = document.getElementById('btn-grid-view');
     const btnGallery = document.getElementById('btn-gallery-view');
     const jumpSelect = document.getElementById('class-jump-select');
+    const warpContainer = document.getElementById('class-warp-buttons');
     const loading = document.getElementById('gallery-loading');
     const loadingText = loading.querySelector('p');
 
@@ -295,50 +287,25 @@
     const menuBtn = document.getElementById('btn-menu-icon');
     const mainNav = document.getElementById('mainNav');
 
-    // Profile Pop-up Handlers
-    function openProfile() {
-      profileModal.hidden = false;
-      document.body.classList.add('modal-open');
-    }
-    function closeProfile() {
-      profileModal.hidden = true;
-      document.body.classList.remove('modal-open');
-    }
+    function openProfile() { profileModal.hidden = false; document.body.classList.add('modal-open'); }
+    function closeProfile() { profileModal.hidden = true; document.body.classList.remove('modal-open'); }
     profileBtn?.addEventListener('click', openProfile);
     profileCloseBtn?.addEventListener('click', closeProfile);
     profileBackdrop?.addEventListener('click', closeProfile);
 
-    // About Modal Handlers
-    function openAbout() {
-      aboutModal.hidden = false;
-      document.body.classList.add('modal-open');
-    }
-    function closeAbout() {
-      aboutModal.hidden = true;
-      document.body.classList.remove('modal-open');
-    }
+    function openAbout() { aboutModal.hidden = false; document.body.classList.add('modal-open'); }
+    function closeAbout() { aboutModal.hidden = true; document.body.classList.remove('modal-open'); }
     aboutBtn?.addEventListener('click', openAbout);
     aboutCloseBtn?.addEventListener('click', closeAbout);
     aboutBackdrop?.addEventListener('click', closeAbout);
 
-    // Search Icon Click
-    searchIconBtn?.addEventListener('click', () => {
-      btnGrid.click();
-      searchInput?.focus();
-    });
-
-    // Mobile Navigation Toggle
-    menuBtn?.addEventListener('click', () => {
-      mainNav.classList.toggle('open');
-    });
+    searchIconBtn?.addEventListener('click', () => { btnGrid.click(); searchInput?.focus(); });
+    menuBtn?.addEventListener('click', () => { mainNav.classList.toggle('open'); });
 
     let galleryInstance = null;
     let hardTimer = null;
 
-    const clearTimers = () => {
-      clearTimeout(hardTimer);
-      hardTimer = null;
-    };
+    const clearTimers = () => { clearTimeout(hardTimer); hardTimer = null; };
 
     btnGrid.addEventListener('click', () => {
       gridView.style.display = 'block';
@@ -365,13 +332,6 @@
       loading.classList.remove('is-error');
       loadingText.textContent = 'Loading archive…';
 
-      let progressStarted = false;
-      setTimeout(() => {
-        if (!loading.hidden && !progressStarted) {
-          loadingText.textContent = 'Preparing gallery…';
-        }
-      }, 1500);
-
       hardTimer = setTimeout(() => {
         if (!loading.hidden) {
           loading.classList.add('is-error');
@@ -390,7 +350,6 @@
         );
 
         galleryInstance.onProgress = (frac, text) => {
-          progressStarted = true;
           if (loading.hidden) return;
           loadingText.textContent = text || `${Math.round(frac * 100)}%`;
         };
@@ -398,30 +357,46 @@
         galleryInstance.onReady = err => {
           clearTimers();
           if (err) {
-            console.error('3D gallery build failed:', err);
             loading.hidden = false;
             loading.classList.add('is-error');
-            loadingText.textContent = `Could not build the 3D gallery: ${err.message || 'Check the browser console.'}`;
+            loadingText.textContent = `Could not build the 3D gallery: ${err.message || 'Error.'}`;
             return;
           }
           loading.hidden = true;
+
+          // Build Warp Buttons & Dropdown
           if (galleryInstance.classes && galleryInstance.classes.length) {
             jumpSelect.innerHTML = '<option value="">Select a room…</option>';
+            if (warpContainer) warpContainer.innerHTML = '';
+
             galleryInstance.classes.forEach((cls, idx) => {
               const opt = document.createElement('option');
               opt.value = idx;
               opt.textContent = `${cls.code} — ${cls.name}`;
               jumpSelect.appendChild(opt);
+
+              if (warpContainer) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'warp-btn';
+                btn.innerHTML = `<span class="warp-code">${cls.code}</span>`;
+                btn.title = `Warp to ${cls.name}`;
+                btn.addEventListener('click', () => {
+                  galleryInstance.jumpToClass(idx);
+                  document.querySelectorAll('.warp-btn').forEach(b => b.classList.remove('active'));
+                  btn.classList.add('active');
+                });
+                warpContainer.appendChild(btn);
+              }
             });
           }
         };
 
         galleryInstance.init().catch(error => {
           clearTimers();
-          console.error('3D gallery initialization failed:', error);
           loading.hidden = false;
           loading.classList.add('is-error');
-          loadingText.textContent = `Could not start the 3D gallery: ${error.message || 'Check the browser console.'}`;
+          loadingText.textContent = `Could not start 3D gallery: ${error.message}`;
         });
       });
     });

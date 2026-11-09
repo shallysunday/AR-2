@@ -8,14 +8,13 @@ import {
 const MAX_ARTWORKS_3D = 80;
 const CONCURRENT_MODELS = 3;
 const PLAQUE_W = 1.1, PLAQUE_H = 0.72;
-const TALL_WALL_H = 40; // Very tall wall height
+const TALL_WALL_H = 40;
 
-// Pastel wall background colors per class
 const CLASS_PASTEL_COLORS = {
-  'IL101': '#F8C8DC', // Illustration: Soft pastel pink
-  'PH101': '#B5EAD7', // Photography: Soft pastel mint teal
-  'AP201': '#FFE5B4', // Advertising Photography: Soft pastel amber
-  'AT201': '#DCD6F7'  // Applied Typography: Soft pastel lavender
+  'IL101': '#F8C8DC',
+  'PH101': '#B5EAD7',
+  'AP201': '#FFE5B4',
+  'AT201': '#DCD6F7'
 };
 
 function makeSignCanvas(classCode, className) {
@@ -25,8 +24,6 @@ function makeSignCanvas(classCode, className) {
   const ctx = c.getContext('2d');
 
   ctx.clearRect(0, 0, W, H);
-
-  // Clear readable pill background badge
   ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(8, 8, W - 16, H - 16, 20);
@@ -43,19 +40,11 @@ function makeSignCanvas(classCode, className) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  // Up arrow
   ctx.beginPath();
-  ctx.moveTo(cx, 115);
-  ctx.lineTo(cx, 48);
-  ctx.stroke();
-
+  ctx.moveTo(cx, 115); ctx.lineTo(cx, 48); ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(cx - 18, 66);
-  ctx.lineTo(cx, 42);
-  ctx.lineTo(cx + 18, 66);
-  ctx.stroke();
+  ctx.moveTo(cx - 18, 66); ctx.lineTo(cx, 42); ctx.lineTo(cx + 18, 66); ctx.stroke();
 
-  // Text
   const textX = 115;
   const textMaxW = W - textX - 24;
   ctx.fillStyle = ink;
@@ -175,8 +164,7 @@ function clamp(ctx, text, maxWidth) {
 
 function makeWallGradientTexture(pastelHex = '#B5EAD7') {
   const c = document.createElement('canvas');
-  c.width = 4;
-  c.height = 512;
+  c.width = 4; c.height = 512;
   const ctx = c.getContext('2d');
 
   const g = ctx.createLinearGradient(0, 512, 0, 0);
@@ -201,7 +189,6 @@ function makeFloorGridTexture(maxAnisotropy) {
 
   ctx.fillStyle = '#f5f5f7';
   ctx.fillRect(0, 0, S, S);
-
   ctx.strokeStyle = 'rgba(180, 180, 190, 0.35)';
   ctx.lineWidth = 4;
   ctx.strokeRect(0, 0, S, S);
@@ -257,15 +244,12 @@ export class ArchitecturalGallery {
 
     this._running = true;
     this._controller = null;
-    this._blobUrls = [];
     this.isTransitioning = false;
     this._generation = 0;
   }
 
   async init() {
     this.scene = new THREE.Scene();
-    
-    // Pure White Void Environment
     this.scene.background = new THREE.Color(0xffffff);
     this.scene.fog = new THREE.FogExp2(0xffffff, 0.005);
 
@@ -307,7 +291,6 @@ export class ArchitecturalGallery {
   async loadDataAndBuild() {
     const items = await this.loadItems();
     this.classes = groupByClass(items);
-
     if (!this.classes.length) return;
 
     this.plan = bestPlan(this.classes.map(c => c.items.length));
@@ -349,7 +332,6 @@ export class ArchitecturalGallery {
     const wallMaterials = new Map();
     const modelQueue = [];
 
-    // Build Rooms
     for (let i = 0; i < total; i++) {
       const entry = entries[i];
       const cls = this.classes[entry.ci];
@@ -359,7 +341,6 @@ export class ArchitecturalGallery {
       room.position.set(entry.P[0], 0, entry.P[1]);
       room.rotation.y = entry.yaw;
 
-      // Floor
       const floorGeo = new THREE.PlaneGeometry(entry.W, entry.D);
       const floorUV = floorGeo.attributes.uv;
       for (let u = 0; u < floorUV.count; u++) {
@@ -370,7 +351,6 @@ export class ArchitecturalGallery {
       floor.rotation.x = -Math.PI / 2;
       room.add(floor);
 
-      // Unique pastel gradient per class
       const pastelHex = CLASS_PASTEL_COLORS[cls.code] || '#B5EAD7';
       if (!wallMaterials.has(cls.code)) {
         wallMaterials.set(cls.code, new THREE.MeshLambertMaterial({
@@ -381,21 +361,14 @@ export class ArchitecturalGallery {
       }
       const wallMat = wallMaterials.get(cls.code);
 
-      // Build Tall Walls (NO Ceiling)
       this.buildWalls(room, entry, H, wallMat);
-
-      // Floating Hanging Light in room center
       this.createFloatingLighting(room, entry.W, entry.D);
-
-      // Door Signs
       this.createSign(room, entry, cls.code, cls.name, true, signGeo, signTextures);
 
-      // Artworks
       const slots = artSlots(entry, cls.items);
       cls.items.forEach((art, idx) => {
         const slot = slots[idx];
         if (!slot) return;
-
         if (slot.is2D) {
           this.createWallFramedArtwork(room, slot, art, plaqueGeo, plaqueTextures);
         } else {
@@ -406,9 +379,7 @@ export class ArchitecturalGallery {
       this.scene.add(room);
     }
 
-    // Build Short Connecting Corridors
     this.buildCorridors(this.plan.corridors, H, wallMaterials.values().next().value || new THREE.MeshLambertMaterial(), floorMat);
-
     if (modelQueue.length) this._loadModelsInBackground(modelQueue);
   }
 
@@ -443,14 +414,12 @@ export class ArchitecturalGallery {
       group.position.set(corr.E[0], 0, corr.E[1]);
       group.rotation.y = angle;
 
-      // Hallway Floor
       const floorGeo = new THREE.PlaneGeometry(DOOR_W, corr.len);
       const floorMesh = new THREE.Mesh(floorGeo, floorMat);
       floorMesh.rotation.x = -Math.PI / 2;
       floorMesh.position.set(0, 0, corr.len / 2);
       group.add(floorMesh);
 
-      // Hallway Left & Right Walls
       const lWallGeo = new THREE.BoxGeometry(WALL_T, height, corr.len);
       this._mapWallV(lWallGeo, height / 2, height);
       const lWall = new THREE.Mesh(lWallGeo, wallMat);
@@ -567,38 +536,87 @@ export class ArchitecturalGallery {
     group.add(sign);
   }
 
+  /**
+   * 2D Artwork Frame Generator with Aspect Ratio Preservation
+   * Prevents stretching or squishing by inspecting texture dimensions.
+   */
   createWallFramedArtwork(group, slot, art, plaqueGeometry, plaqueCache) {
     const artGroup = new THREE.Group();
     artGroup.position.set(slot.x, 2.1, slot.z);
     artGroup.rotation.y = slot.yaw;
     artGroup.userData = { art };
 
-    const frameW = 1.7, frameH = 2.1, frameD = 0.08, borderT = 0.12;
+    const borderT = 0.1;
+    const maxInnerW = 1.6;
+    const maxInnerH = 2.0;
 
-    const frameGeo = new THREE.BoxGeometry(frameW, frameH, frameD);
     const frameMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 });
-    const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+    const canvasMat = new THREE.MeshBasicMaterial();
+
+    const frameMesh = new THREE.Mesh(new THREE.BufferGeometry(), frameMat);
+    const canvasMesh = new THREE.Mesh(new THREE.BufferGeometry(), canvasMat);
     artGroup.add(frameMesh);
-
-    const canvasGeo = new THREE.PlaneGeometry(frameW - borderT * 2, frameH - borderT * 2);
-    const canvasTex = art.thumbnail
-      ? new THREE.TextureLoader().load(art.thumbnail)
-      : new THREE.CanvasTexture(make2DArtworkCanvas(art));
-    canvasTex.colorSpace = THREE.SRGBColorSpace;
-
-    const canvasMesh = new THREE.Mesh(canvasGeo, new THREE.MeshBasicMaterial({ map: canvasTex }));
-    canvasMesh.position.z = frameD / 2 + 0.005;
     artGroup.add(canvasMesh);
 
-    const key = art.id || art.title || Math.random().toString(36);
-    if (!plaqueCache.has(key)) {
+    const plaqueKey = art.id || art.title || Math.random().toString(36);
+    if (!plaqueCache.has(plaqueKey)) {
       const texture = new THREE.CanvasTexture(makePlaqueCanvas(art));
       texture.colorSpace = THREE.SRGBColorSpace;
-      plaqueCache.set(key, texture);
+      plaqueCache.set(plaqueKey, texture);
     }
-    const plaque = new THREE.Mesh(plaqueGeometry, new THREE.MeshBasicMaterial({ map: plaqueCache.get(key) }));
-    plaque.position.set(frameW / 2 + 0.75, -0.4, 0.02);
-    artGroup.add(plaque);
+    const plaqueMesh = new THREE.Mesh(plaqueGeometry, new THREE.MeshBasicMaterial({ map: plaqueCache.get(plaqueKey) }));
+    artGroup.add(plaqueMesh);
+
+    const updateFrameDimensions = (aspectRatio) => {
+      let w = maxInnerW;
+      let h = w / aspectRatio;
+      if (h > maxInnerH) {
+        h = maxInnerH;
+        w = h * aspectRatio;
+      }
+      const frameW = w + borderT * 2;
+      const frameH = h + borderT * 2;
+      const frameD = 0.08;
+
+      if (frameMesh.geometry) frameMesh.geometry.dispose();
+      if (canvasMesh.geometry) canvasMesh.geometry.dispose();
+
+      frameMesh.geometry = new THREE.BoxGeometry(frameW, frameH, frameD);
+      canvasMesh.geometry = new THREE.PlaneGeometry(w, h);
+      canvasMesh.position.z = frameD / 2 + 0.005;
+
+      plaqueMesh.position.set(frameW / 2 + 0.75, -frameH / 2 + 0.35, 0.02);
+    };
+
+    if (art.thumbnail) {
+      new THREE.TextureLoader().load(
+        art.thumbnail,
+        (texture) => {
+          texture.colorSpace = THREE.SRGBColorSpace;
+          canvasMat.map = texture;
+          canvasMat.needsUpdate = true;
+          const img = texture.image;
+          if (img && img.width && img.height) {
+            updateFrameDimensions(img.width / img.height);
+          } else {
+            updateFrameDimensions(512 / 640);
+          }
+        },
+        undefined,
+        () => {
+          const fallbackTex = new THREE.CanvasTexture(make2DArtworkCanvas(art));
+          fallbackTex.colorSpace = THREE.SRGBColorSpace;
+          canvasMat.map = fallbackTex;
+          canvasMat.needsUpdate = true;
+          updateFrameDimensions(512 / 640);
+        }
+      );
+    } else {
+      const canvasTex = new THREE.CanvasTexture(make2DArtworkCanvas(art));
+      canvasTex.colorSpace = THREE.SRGBColorSpace;
+      canvasMat.map = canvasTex;
+      updateFrameDimensions(512 / 640);
+    }
 
     group.add(artGroup);
   }
@@ -672,35 +690,26 @@ export class ArchitecturalGallery {
     for (let i = 0; i < Math.min(CONCURRENT_MODELS, queue.length); i++) worker();
   }
 
-  /* ==========================================================
-     TELEPORT & NAVIGATION PATHFINDING
-     ========================================================== */
-
   computePath(fromIndex, toIndex) {
     const entries = this.plan.entries;
     if (fromIndex === toIndex) return [this.playerPos];
 
     const entranceOf = entry => worldOf(entry.P, entry.yaw, [0, entry.D / 2]);
     const exitOf = entry => worldOf(entry.P, entry.yaw, entry.exit.pos);
-
     const points = [this.playerPos.slice()];
 
     if (fromIndex < toIndex) {
       points.push(exitOf(entries[fromIndex]));
       for (let k = fromIndex; k < toIndex; k++) {
         points.push(entranceOf(entries[k + 1]));
-        if (k + 1 < toIndex) {
-          points.push(exitOf(entries[k + 1]));
-        }
+        if (k + 1 < toIndex) points.push(exitOf(entries[k + 1]));
       }
       points.push([entries[toIndex].P[0], entries[toIndex].P[1]]);
     } else {
       points.push(entranceOf(entries[fromIndex]));
       for (let k = fromIndex - 1; k >= toIndex; k--) {
         points.push(exitOf(entries[k]));
-        if (k > toIndex) {
-          points.push(entranceOf(entries[k]));
-        }
+        if (k > toIndex) points.push(entranceOf(entries[k]));
       }
       points.push([entries[toIndex].P[0], entries[toIndex].P[1]]);
     }
@@ -711,8 +720,6 @@ export class ArchitecturalGallery {
   get currentEntryIdx() {
     for (let i = 0; i < this.plan.entries.length; i++) {
       const entry = this.plan.entries[i];
-      const halfW = entry.W / 2;
-      const halfD = entry.D / 2;
       const dx = this.playerPos[0] - entry.P[0];
       const dz = this.playerPos[1] - entry.P[1];
       const c = Math.cos(-entry.yaw);
@@ -720,9 +727,7 @@ export class ArchitecturalGallery {
       const lx = dx * c + dz * s;
       const lz = -dx * s + dz * c;
 
-      if (Math.abs(lx) <= halfW + 1 && Math.abs(lz) <= halfD + 1) {
-        return i;
-      }
+      if (Math.abs(lx) <= entry.W / 2 + 1 && Math.abs(lz) <= entry.D / 2 + 1) return i;
     }
     return -1;
   }
@@ -733,7 +738,6 @@ export class ArchitecturalGallery {
     const targetIndex = this.plan.entries.findIndex(
       entry => entry.role === 'main' && entry.ci === classIndex
     );
-
     if (targetIndex < 0) return;
 
     const fromIndex = this.currentEntryIdx;
@@ -741,24 +745,17 @@ export class ArchitecturalGallery {
       ? this.computePath(fromIndex, targetIndex)
       : [
           [this.playerPos[0], this.playerPos[1]],
-          [
-            this.plan.entries[targetIndex].P[0],
-            this.plan.entries[targetIndex].P[1]
-          ]
+          [this.plan.entries[targetIndex].P[0], this.plan.entries[targetIndex].P[1]]
         ];
 
     if (waypoints.length < 2) return;
 
     const lengths = [];
     let totalLength = 0;
-
     for (let i = 1; i < waypoints.length; i++) {
-      const length = Math.hypot(
-        waypoints[i][0] - waypoints[i - 1][0],
-        waypoints[i][1] - waypoints[i - 1][1]
-      );
-      lengths.push(length);
-      totalLength += length;
+      const len = Math.hypot(waypoints[i][0] - waypoints[i - 1][0], waypoints[i][1] - waypoints[i - 1][1]);
+      lengths.push(len);
+      totalLength += len;
     }
 
     const startYaw = this.playerYaw;
@@ -802,14 +799,10 @@ export class ArchitecturalGallery {
         p0[0] + (p1[0] - p0[0]) * segmentT,
         p0[1] + (p1[1] - p0[1]) * segmentT
       ];
-
       this.playerYaw = startYaw + yawDelta * eased;
 
-      if (t < 1) {
-        requestAnimationFrame(step);
-      } else {
-        this.isTransitioning = false;
-      }
+      if (t < 1) requestAnimationFrame(step);
+      else this.isTransitioning = false;
     };
 
     requestAnimationFrame(step);
@@ -824,51 +817,29 @@ export class ArchitecturalGallery {
     if (!pre || !post) return;
 
     const inside = entry => {
-      const halfW = entry.W / 2;
-      const halfD = entry.D / 2;
       const dx = this.playerPos[0] - entry.P[0];
       const dz = this.playerPos[1] - entry.P[1];
       const c = Math.cos(-entry.yaw);
       const s = Math.sin(-entry.yaw);
       const lx = dx * c + dz * s;
       const lz = -dx * s + dz * c;
-
-      return (
-        Math.abs(lx) <= halfW - 0.3 &&
-        Math.abs(lz) <= halfD - 0.3
-      );
+      return (Math.abs(lx) <= entry.W / 2 - 0.3 && Math.abs(lz) <= entry.D / 2 - 0.3);
     };
 
     if (inside(pre)) {
-      const lastMain = entries.find(
-        entry => entry.role === 'main' &&
-          entry.ci === this.classes.length - 1
-      );
+      const lastMain = entries.find(e => e.role === 'main' && e.ci === this.classes.length - 1);
       if (lastMain) this.teleportBetween(pre, lastMain);
     } else if (inside(post)) {
-      const firstMain = entries.find(
-        entry => entry.role === 'main' && entry.ci === 0
-      );
+      const firstMain = entries.find(e => e.role === 'main' && e.ci === 0);
       if (firstMain) this.teleportBetween(post, firstMain);
     }
   }
 
   teleportBetween(fromEntry, toEntry) {
-    const local = rot(
-      [
-        this.playerPos[0] - fromEntry.P[0],
-        this.playerPos[1] - fromEntry.P[1]
-      ],
-      -fromEntry.yaw
-    );
-
+    const local = rot([this.playerPos[0] - fromEntry.P[0], this.playerPos[1] - fromEntry.P[1]], -fromEntry.yaw);
     const world = rot(local, toEntry.yaw);
 
-    this.playerPos = [
-      toEntry.P[0] + world[0],
-      toEntry.P[1] + world[1]
-    ];
-
+    this.playerPos = [toEntry.P[0] + world[0], toEntry.P[1] + world[1]];
     this.playerYaw += toEntry.yaw - fromEntry.yaw;
   }
 
