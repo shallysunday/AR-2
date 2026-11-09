@@ -646,3 +646,7 @@ body.view-3d { overflow: hidden; }
   background: #0d0d0d;
 }
 #canvas-container { position: absolute; inset: 0; }
+body.view-3d .accordion-section,
+body.view-3d .site-footer {
+  display: none !important;
+}
