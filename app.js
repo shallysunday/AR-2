@@ -1,17 +1,5 @@
 /* ==========================================================
    AR Art & Design Archive — app logic
-   ----------------------------------------------------------
-   Two storage modes, chosen by config.js:
-
-   CLOUD (Supabase URL + key set)
-     - metadata  → Supabase table "artworks"
-     - .glb + thumbnail → Supabase Storage bucket "artworks"
-     Everyone sees the same archive; new uploads appear on all devices.
-
-   LOCAL (config left empty)
-     - metadata  → localStorage
-     - .glb      → IndexedDB
-     Only the current browser sees the uploads.
    ========================================================== */
 (() => {
   'use strict';
@@ -23,234 +11,265 @@
   const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
   const SB_URL = (CFG.SUPABASE_URL || '').replace(/\/+$/, '');
   const BUCKET = 'artworks';
-  const BUILD = 'build 5';
+  const BUILD = 'build 6';
   let lastLoadError = '';
 
-  // ★ NEW: cache the loadAll result so the 3D gallery doesn't refetch.
   let itemsCache = null;
   let itemsCacheTime = 0;
-  const ITEMS_CACHE_TTL = 30_000;   // 30 s
+  const ITEMS_CACHE_TTL = 30_000;
 
   const STORE_KEY = 'arArchive.items.v1';
   const DB_NAME = 'arArchiveFiles';
   const DB_STORE = 'models';
   const MAX_FILE_MB = CLOUD ? 50 : 60;
 
-  /* ---------- Sample artworks ---------- */
+  /* ---------- Sample artworks (Illustration, Photography, Advertising Photography, Applied Typography) ---------- */
   const MS = 'https://modelviewer.dev/shared-assets/models/';
-  // Demo records use public sample GLB models. Replace them with student work
-  // when real project models are available.
   const SAMPLE_ITEMS = [
+    // --- Illustration ---
     {
-      id: 'sample-nm-astronaut',
-      title: 'Orbit: Figure Study',
-      description: 'Digital sculpture study of volume and silhouette.',
+      id: 'sample-il-1',
+      title: 'Character Line & Form',
+      description: 'Digital 2D illustration exploring silhouette, gesture, and linework.',
       student: 'Alya Putri',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
-      className: 'New Media',
-      classCode: 'NM101',
+      className: 'Illustration',
+      classCode: 'IL101',
       period: 'Odd 2026/2027',
-      modelUrl: MS + 'Astronaut.glb',
+      is2D: true,
+      artColor: '#e07a5f',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-nm-robot',
-      title: 'Friendly Machine',
-      description: 'Character design exploring expression and gesture.',
+      id: 'sample-il-2',
+      title: 'Expressive Creature',
+      description: '3D character sculpture study based on initial illustration concept.',
       student: 'Rizky Pratama',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
-      className: 'New Media',
-      classCode: 'NM101',
+      className: 'Illustration',
+      classCode: 'IL101',
       period: 'Odd 2026/2027',
+      is2D: false,
       modelUrl: MS + 'RobotExpressive.glb',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-nm-lunar',
-      title: 'Lunar Portrait',
-      description: 'A portrait study as an interactive archive object.',
+      id: 'sample-il-3',
+      title: 'Editorial Visual Narrative',
+      description: 'Editorial poster illustration exploring color harmony and rhythm.',
       student: 'Dimas Wicaksono',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
-      className: 'New Media',
-      classCode: 'NM101',
+      className: 'Illustration',
+      classCode: 'IL101',
       period: 'Odd 2026/2027',
-      modelUrl: MS + 'NeilArmstrong.glb',
+      is2D: true,
+      artColor: '#3d405b',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-nm-fox',
-      title: 'Digital Creature',
-      description: 'A playful study of character and material.',
+      id: 'sample-il-4',
+      title: 'Digital Creature Model',
+      description: 'Three-dimensional interpretation of an illustrated mascot.',
       student: 'Siti Maharani',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
-      className: 'New Media',
-      classCode: 'NM101',
+      className: 'Illustration',
+      classCode: 'IL101',
       period: 'Odd 2026/2027',
+      is2D: false,
       modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Fox/glTF-Binary/Fox.glb',
       thumbnail: '',
       sample: true
     },
+
+    // --- Photography ---
     {
-      id: 'sample-nm-man',
-      title: 'Walking Figure',
-      description: 'A figure study of posture and stride.',
+      id: 'sample-ph-1',
+      title: 'Monochrome Geometry',
+      description: 'Architectural photography study focusing on high-contrast shadows.',
       student: 'Fajar Nugroho',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
-      className: 'New Media',
-      classCode: 'NM101',
+      lecturer: 'Siti Rahma, M.Sn.',
+      className: 'Photography',
+      classCode: 'PH101',
       period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/CesiumMan/glTF-Binary/CesiumMan.glb',
+      is2D: true,
+      artColor: '#2b2d42',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-tp-bottle',
-      title: 'Everyday Form',
-      description: 'A label study on a familiar object.',
+      id: 'sample-ph-2',
+      title: 'Urban Twilight Light',
+      description: 'Long-exposure urban photography capturing artificial light tracks.',
       student: 'Nabila Zahra',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Typography',
-      classCode: 'TP201',
+      lecturer: 'Siti Rahma, M.Sn.',
+      className: 'Photography',
+      classCode: 'PH101',
       period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/WaterBottle/glTF-Binary/WaterBottle.glb',
+      is2D: true,
+      artColor: '#8d99ae',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-tp-boombox',
-      title: 'Sound Object',
-      description: 'Lettering and surface graphics on a retro object.',
+      id: 'sample-ph-3',
+      title: 'Signal Lantern Artifact',
+      description: '3D scan of an antique studio signal lantern light object.',
       student: 'Kevin Hartono',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Typography',
-      classCode: 'TP201',
+      lecturer: 'Siti Rahma, M.Sn.',
+      className: 'Photography',
+      classCode: 'PH101',
       period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/BoomBox/glTF-Binary/BoomBox.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tp-avocado',
-      title: 'Packaging Fruit',
-      description: 'Visual communication on organic form.',
-      student: 'Laras Ayu',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Typography',
-      classCode: 'TP201',
-      period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Avocado/glTF-Binary/Avocado.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-tp-lantern',
-      title: 'Signal Lantern',
-      description: 'Type and light as wayfinding.',
-      student: 'Bayu Aditya',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Typography',
-      classCode: 'TP201',
-      period: 'Odd 2026/2027',
+      is2D: false,
       modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Lantern/glTF-Binary/Lantern.glb',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-tp-duck',
-      title: 'Rubber Duck Mark',
-      description: 'A mascot mark explored in three dimensions.',
+      id: 'sample-ph-4',
+      title: 'Minimalist Portraiture',
+      description: 'Studio lighting exploration emphasizing facial contour and tone.',
+      student: 'Laras Ayu',
+      lecturer: 'Siti Rahma, M.Sn.',
+      className: 'Photography',
+      classCode: 'PH101',
+      period: 'Odd 2026/2027',
+      is2D: true,
+      artColor: '#4a4e69',
+      thumbnail: '',
+      sample: true
+    },
+
+    // --- Advertising Photography ---
+    {
+      id: 'sample-ap-1',
+      title: 'Commercial Beverage Splash',
+      description: 'High-speed action photo staging for commercial beverage ad.',
+      student: 'Bayu Aditya',
+      lecturer: 'Doni Prasetyo, M.Ds.',
+      className: 'Advertising Photography',
+      classCode: 'AP201',
+      period: 'Odd 2026/2027',
+      is2D: true,
+      artColor: '#f4a261',
+      thumbnail: '',
+      sample: true
+    },
+    {
+      id: 'sample-ap-2',
+      title: 'Hydro Product Bottle',
+      description: 'Commercial 3D packaging bottle model for print and web ad.',
       student: 'Citra Dewi',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Typography',
-      classCode: 'TP201',
+      lecturer: 'Doni Prasetyo, M.Ds.',
+      className: 'Advertising Photography',
+      classCode: 'AP201',
       period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Duck/glTF-Binary/Duck.glb',
+      is2D: false,
+      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/WaterBottle/glTF-Binary/WaterBottle.glb',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-tr-horse',
-      title: 'Horse in Motion',
-      description: 'A sculptural study of movement and balance.',
+      id: 'sample-ap-3',
+      title: 'Retro Audio Campaign',
+      description: 'Product placement setup featuring a retro sound boombox object.',
       student: 'Nadia Rahma',
-      lecturer: 'Dr. Budi Santoso',
-      className: 'Trimatra',
-      classCode: 'TR301',
+      lecturer: 'Doni Prasetyo, M.Ds.',
+      className: 'Advertising Photography',
+      classCode: 'AP201',
       period: 'Odd 2026/2027',
-      modelUrl: MS + 'Horse.glb',
+      is2D: false,
+      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/BoomBox/glTF-Binary/BoomBox.glb',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-tr-chair',
-      title: 'Object and Space',
-      description: 'Proportion and structure of an object in space.',
+      id: 'sample-ap-4',
+      title: 'Macro Product Lighting',
+      description: 'Precision studio macro lighting for luxury watch campaign.',
       student: 'Bagas Firmansyah',
-      lecturer: 'Dr. Budi Santoso',
-      className: 'Trimatra',
-      classCode: 'TR301',
+      lecturer: 'Doni Prasetyo, M.Ds.',
+      className: 'Advertising Photography',
+      classCode: 'AP201',
       period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/SheenChair/glTF-Binary/SheenChair.glb',
+      is2D: true,
+      artColor: '#264653',
       thumbnail: '',
       sample: true
     },
+
+    // --- Applied Typography ---
     {
-      id: 'sample-tr-helmet',
-      title: 'Surface Study',
-      description: 'Hard surfaces and highlights describing volume.',
+      id: 'sample-at-1',
+      title: 'Expressive Type Poster',
+      description: 'Modular grid breakdown and expressive typographic scale.',
       student: 'Intan Permata',
-      lecturer: 'Dr. Budi Santoso',
-      className: 'Trimatra',
-      classCode: 'TR301',
+      lecturer: 'Maya Anggraini, M.Ds.',
+      className: 'Applied Typography',
+      classCode: 'AT201',
       period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/DamagedHelmet/glTF-Binary/DamagedHelmet.glb',
+      is2D: true,
+      artColor: '#1d3557',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-tr-car',
-      title: 'Toy Vehicle',
-      description: 'A form study of a small vehicle.',
+      id: 'sample-at-2',
+      title: 'Spatial Letterform Sculpture',
+      description: '3D kinetic typographic object designed for spatial wayfinding.',
       student: 'Rafi Maulana',
-      lecturer: 'Dr. Budi Santoso',
-      className: 'Trimatra',
-      classCode: 'TR301',
+      lecturer: 'Maya Anggraini, M.Ds.',
+      className: 'Applied Typography',
+      classCode: 'AT201',
       period: 'Odd 2026/2027',
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/ToyCar/glTF-Binary/ToyCar.glb',
+      is2D: false,
+      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Avocado/glTF-Binary/Avocado.glb',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-tr-astro',
-      title: 'Figure in Space',
-      description: 'Silhouette, scale, and spatial presence.',
+      id: 'sample-at-3',
+      title: 'Experimental Grid & Type',
+      description: 'Editorial layout exploration focusing on asymmetrical typography.',
       student: 'Dewi Anggraini',
-      lecturer: 'Dr. Budi Santoso',
-      className: 'Trimatra',
-      classCode: 'TR301',
+      lecturer: 'Maya Anggraini, M.Ds.',
+      className: 'Applied Typography',
+      classCode: 'AT201',
       period: 'Odd 2026/2027',
-      modelUrl: MS + 'Astronaut.glb',
+      is2D: true,
+      artColor: '#457b9d',
+      thumbnail: '',
+      sample: true
+    },
+    {
+      id: 'sample-at-4',
+      title: 'Mascot Mark in 3D',
+      description: 'Brand typographic mascot translated into 3D volume.',
+      student: 'Alya Putri',
+      lecturer: 'Maya Anggraini, M.Ds.',
+      className: 'Applied Typography',
+      classCode: 'AT201',
+      period: 'Odd 2026/2027',
+      is2D: false,
+      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Duck/glTF-Binary/Duck.glb',
       thumbnail: '',
       sample: true
     }
   ].map((item, i) => ({ ...item, createdAt: Date.now() - (i + 1) * 86400000 }));
 
-  /* ---------- Local storage helpers (LOCAL mode) ---------- */
   function loadLocalItems() {
     try {
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          // Refresh demo entries after a code update, but keep real user uploads.
           const userItems = parsed.filter(item => !item.sample);
           const refreshed = CFG.SHOW_SAMPLES
             ? userItems.concat(SAMPLE_ITEMS)
             : userItems;
-          try { saveLocalItems(refreshed); } catch (e) { /* keep usable in memory */ }
+          try { saveLocalItems(refreshed); } catch (e) { /* ignore */ }
           return refreshed;
         }
       }
@@ -263,7 +282,7 @@
   }
 
   function saveLocalItems(items) {
-    localStorage.setItem(STORE_KEY, JSON.stringify(items)); // may throw on quota
+    localStorage.setItem(STORE_KEY, JSON.stringify(items));
   }
 
   function openDB() {
@@ -288,18 +307,14 @@
   const getModel = id => idb('readonly', s => s.get(id));
   const deleteModel = id => idb('readwrite', s => s.delete(id));
 
-  /* ---------- Supabase helpers (CLOUD mode) ---------- */
   function sbHeaders(extra = {}) {
     const h = { apikey: CFG.SUPABASE_ANON_KEY, ...extra };
-    // Legacy anon keys are JWTs and may also be sent as a bearer token.
-    // The newer "publishable" keys must only go in the apikey header.
     if (CFG.SUPABASE_ANON_KEY.startsWith('eyJ')) h.Authorization = 'Bearer ' + CFG.SUPABASE_ANON_KEY;
     return h;
   }
 
   const publicUrl = path => `${SB_URL}/storage/v1/object/public/${BUCKET}/${path}`;
 
-    // ★ CHANGED: aborts the fetch after 8 s instead of waiting for the browser
   async function fetchRemoteItems() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -321,6 +336,7 @@
         period: r.period,
         modelUrl: r.model_url,
         thumbnail: r.thumbnail_url,
+        is2D: r.is_2d || false,
         createdAt: Date.parse(r.created_at) || 0,
         remote: true
       }));
@@ -334,7 +350,6 @@
     }
   }
 
-  // XHR (not fetch) so we can show upload progress on slow mobile connections
   function xhrUpload(path, blob, contentType, onProgress) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -350,7 +365,6 @@
     });
   }
 
-    // ★ CHANGED: caches the result and accepts forceFresh
   async function loadAll(forceFresh = false) {
     if (!forceFresh && itemsCache && Date.now() - itemsCacheTime < ITEMS_CACHE_TTL) {
       return itemsCache;
@@ -375,7 +389,6 @@
     return list;
   }
 
-  /* ---------- Small utilities ---------- */
   const $ = (sel, root = document) => root.querySelector(sel);
 
   function el(tag, attrs = {}, ...children) {
@@ -404,13 +417,7 @@
   const norm = s => (s || '').toString().toLowerCase().trim();
   const uniqueSorted = arr => [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const initials = s => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-  const newId = () => (window.crypto && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 
-  /* ==========================================================
-     GALLERY PAGE
-     ========================================================== */
   async function initGallery() {
     let items = [];
     const state = { q: '', code: '', period: '' };
@@ -456,7 +463,7 @@
         img.addEventListener('error', () => img.remove());
         thumb.append(img);
       }
-      thumb.append(el('span', { class: 'badge-ar', text: '3D · AR' }));
+      thumb.append(el('span', { class: 'badge-ar', text: item.is2D ? '2D · FRAME' : '3D · AR' }));
 
       const body = el('div', { class: 'card-body' },
         el('span', { class: 'card-code', text: item.classCode }),
@@ -486,16 +493,15 @@
       empty.hidden = list.length > 0;
       const total = items.length;
       const source = !CLOUD
-        ? ' · THIS DEVICE ONLY (config.js has no Supabase keys)'
+        ? ' · THIS DEVICE ONLY'
         : lastLoadError
-          ? ` · SHARED ARCHIVE ERROR: ${lastLoadError}`
+          ? ` · ERROR: ${lastLoadError}`
           : ' · shared archive connected';
       count.textContent = (list.length === total
         ? `${total} artwork${total === 1 ? '' : 's'}`
         : `${list.length} of ${total} artworks`) + source;
     }
 
-    /* ----- Events ----- */
     searchInput.addEventListener('input', () => { state.q = searchInput.value; render(); });
     classFilter.addEventListener('change', () => { state.code = classFilter.value; render(); });
     periodFilter.addEventListener('change', () => { state.period = periodFilter.value; render(); });
@@ -505,13 +511,11 @@
       render();
     });
 
-    /* ----- Detail view ----- */
     const modal = $('#detailModal');
     const host = $('#viewerHost');
     const deleteBtn = $('#deleteBtn');
     let activeBlobUrl = null;
     let lastFocus = null;
-    let currentId = null;
 
     async function openDetail(id) {
       const item = items.find(i => i.id === id);
@@ -519,7 +523,7 @@
 
       let src = item.modelUrl;
 
-      if (!src) {
+      if (!src && !item.is2D) {
         try {
           const blob = await getModel(item.id);
           if (!blob) throw new Error('Model file missing');
@@ -527,17 +531,12 @@
           src = activeBlobUrl;
         } catch (e) {
           console.error(e);
-          toast('Could not load this model file from the browser.');
+          toast('Could not load this file.');
           return;
         }
       }
 
-      // Scene Viewer (Android) needs a public https URL, so blob: URLs skip it.
-      const arModes = src.startsWith('blob:') ? 'webxr quick-look' : 'scene-viewer webxr quick-look';
-
-      currentId = id;
       lastFocus = document.activeElement;
-
       $('#detailClass').textContent = item.className;
       $('#detailTitle').textContent = item.title;
       $('#detailDesc').textContent = item.description || 'No description provided.';
@@ -545,39 +544,40 @@
       $('#detailLecturer').textContent = item.lecturer;
       $('#detailCode').textContent = item.classCode;
       $('#detailPeriod').textContent = item.period;
-      // Only locally stored uploads can be deleted from the page
       deleteBtn.hidden = !!(item.sample || item.remote);
 
       host.replaceChildren();
-      const loading = el('div', { class: 'viewer-loading', text: 'Loading 3D model…' });
-      const mv = document.createElement('model-viewer');
-      mv.setAttribute('src', src);
-      mv.setAttribute('alt', `3D model: ${item.title} by ${item.student}`);
-      mv.setAttribute('camera-controls', '');
-      mv.setAttribute('touch-action', 'pan-y');
-      mv.setAttribute('auto-rotate', '');
-      mv.setAttribute('shadow-intensity', '1');
-      mv.setAttribute('environment-image', 'neutral');
-      mv.setAttribute('exposure', '1');
-      mv.setAttribute('ar', '');
-      mv.setAttribute('ar-modes', arModes);
-      mv.setAttribute('ar-scale', 'auto');
-      if (item.thumbnail) mv.setAttribute('poster', item.thumbnail);
+      const loading = el('div', { class: 'viewer-loading', text: 'Loading artwork…' });
 
-      const arBtn = el('button', { slot: 'ar-button', class: 'btn-ar', type: 'button', text: 'View in AR' });
-      mv.append(arBtn);
+      if (src) {
+        const mv = document.createElement('model-viewer');
+        mv.setAttribute('src', src);
+        mv.setAttribute('alt', `3D model: ${item.title}`);
+        mv.setAttribute('camera-controls', '');
+        mv.setAttribute('touch-action', 'pan-y');
+        mv.setAttribute('auto-rotate', '');
+        mv.setAttribute('shadow-intensity', '1');
+        mv.setAttribute('environment-image', 'neutral');
+        mv.setAttribute('ar', '');
+        mv.setAttribute('ar-modes', 'webxr quick-look');
 
-      mv.addEventListener('load', () => loading.classList.add('done'));
-      mv.addEventListener('error', () => { loading.textContent = 'Sorry, this model could not be loaded.'; });
-
-      host.append(mv, loading);
+        const arBtn = el('button', { slot: 'ar-button', class: 'btn-ar', type: 'button', text: 'View in AR' });
+        mv.append(arBtn);
+        mv.addEventListener('load', () => loading.classList.add('done'));
+        host.append(mv, loading);
+      } else {
+        const frameImg = el('div', { class: 'viewer-2d-display' },
+          el('img', { src: item.thumbnail || '', alt: item.title })
+        );
+        loading.classList.add('done');
+        host.append(frameImg);
+      }
 
       modal.hidden = false;
       document.body.classList.add('modal-open');
       $('.modal-close', modal).focus();
     }
 
-    // ★ NEW: let the 3D gallery open the same detail modal by id
     window.openArchiveDetail = id => {
       if (modal.hidden) openDetail(id);
     };
@@ -587,255 +587,17 @@
       document.body.classList.remove('modal-open');
       host.replaceChildren();
       if (activeBlobUrl) { URL.revokeObjectURL(activeBlobUrl); activeBlobUrl = null; }
-      currentId = null;
-      if (lastFocus && lastFocus.focus) lastFocus.focus();
     }
 
     modal.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeDetail(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeDetail(); });
 
-    deleteBtn.addEventListener('click', async () => {
-      const item = items.find(i => i.id === currentId);
-      if (!item || item.sample || item.remote) return;
-      if (!confirm(`Delete “${item.title}” from the archive? This can't be undone.`)) return;
-      items = items.filter(i => i.id !== item.id);
-      try { saveLocalItems(items.filter(i => !i.sample || CFG.SHOW_SAMPLES)); await deleteModel(item.id); } catch (e) { console.warn(e); }
-      closeDetail();
-      refreshFilterOptions();
-      render();
-      toast('Artwork deleted');
-    });
-
-    /* ----- Init ----- */
     count.textContent = 'Loading archive…';
     items = await loadAll();
     refreshFilterOptions();
     render();
-
-    const params = new URLSearchParams(location.search);
-    const added = params.get('added');
-    if (added) {
-      toast(added === 'shared' ? 'Saved to the SHARED archive ✓'
-        : added === 'local' ? 'Saved on THIS DEVICE only (shared mode is off)'
-        : 'Added to the archive (old upload page: not saved to Supabase)');
-      history.replaceState(null, '', location.pathname);
-    }
   }
 
-  /* ==========================================================
-     UPLOAD PAGE
-     ========================================================== */
-  function initUpload() {
-    const form = $('#uploadForm');
-    const fileInput = $('#modelFile');
-    const previewBox = $('#previewBox');
-    const viewer = $('#previewViewer');
-    const errorBox = $('#formError');
-    const submitBtn = $('#submitBtn');
-    const modeNote = $('#modeNote');
-
-    let previewUrl = null;
-    let modelReady = false;
-
-    if (modeNote) {
-      modeNote.textContent = `${BUILD} · ` + (CLOUD
-        ? 'Shared archive: your upload will be visible on every device.'
-        : 'This-device mode: uploads are only visible in this browser until the shared archive is set up.');
-    }
-
-    // Suggest periods already used in the archive
-    const dl = $('#periodSuggestions');
-    loadAll().then(list => {
-      uniqueSorted(list.map(i => i.period)).forEach(p => dl.append(el('option', { value: p })));
-    }).catch(() => {});
-
-    function showError(msg) {
-      errorBox.textContent = msg;
-      errorBox.hidden = !msg;
-      if (msg) errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    fileInput.addEventListener('change', () => {
-      showError('');
-      modelReady = false;
-      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
-      const file = fileInput.files[0];
-      if (!file) { previewBox.hidden = true; return; }
-
-      if (!/\.glb$/i.test(file.name)) {
-        fileInput.value = ''; previewBox.hidden = true;
-        showError('Please choose a .glb file (export as GLB from Scaniverse).');
-        return;
-      }
-      if (file.size > MAX_FILE_MB * 1024 * 1024) {
-        fileInput.value = ''; previewBox.hidden = true;
-        showError(`That file is larger than ${MAX_FILE_MB} MB. Try exporting at a lower quality.`);
-        return;
-      }
-      previewUrl = URL.createObjectURL(file);
-      viewer.setAttribute('src', previewUrl);
-      previewBox.hidden = false;
-    });
-
-    // ★ NEW: free the preview blob URL when the page unloads
-    window.addEventListener('beforeunload', () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    });
-
-    viewer.addEventListener('load', () => { modelReady = true; });
-    viewer.addEventListener('error', () => {
-      modelReady = false;
-      showError('This file could not be read as a valid .glb model.');
-    });
-
-    const waitForModel = (timeout = 8000) => new Promise(resolve => {
-      const start = Date.now();
-      (function check() {
-        if (modelReady || Date.now() - start > timeout) return resolve(modelReady);
-        setTimeout(check, 100);
-      })();
-    });
-
-    // Capture the preview canvas and shrink it to a small JPEG for the card
-    async function captureThumbnail() {
-      try {
-        if (!(await waitForModel())) return '';
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-        const dataUrl = await viewer.toDataURL('image/jpeg', 0.85);
-        const img = await new Promise((res, rej) => {
-          const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl;
-        });
-        const max = 560;
-        const scale = Math.min(1, max / Math.max(img.width, img.height));
-        const c = document.createElement('canvas');
-        c.width = Math.round(img.width * scale);
-        c.height = Math.round(img.height * scale);
-        const ctx = c.getContext('2d');
-        ctx.fillStyle = '#ece8de';
-        ctx.fillRect(0, 0, c.width, c.height);
-        ctx.drawImage(img, 0, 0, c.width, c.height);
-        return c.toDataURL('image/jpeg', 0.75);
-      } catch (e) {
-        console.warn('Thumbnail capture failed', e);
-        return '';
-      }
-    }
-
-    async function saveToCloud(file, fields, thumbnail) {
-      const id = newId();
-      const modelPath = `models/${id}.glb`;
-      const thumbPath = `thumbs/${id}.jpg`;
-
-      await xhrUpload(modelPath, file, 'model/gltf-binary', p => {
-        submitBtn.textContent = `Uploading ${Math.round(p * 100)}%`;
-      });
-
-      let thumbnailUrl = '';
-      if (thumbnail) {
-        try {
-          submitBtn.textContent = 'Saving thumbnail…';
-          const thumbBlob = await (await fetch(thumbnail)).blob();
-          await xhrUpload(thumbPath, thumbBlob, 'image/jpeg');
-          thumbnailUrl = publicUrl(thumbPath);
-        } catch (e) {
-          console.warn('Thumbnail upload failed, continuing without it', e);
-        }
-      }
-
-      submitBtn.textContent = 'Publishing…';
-      const res = await fetch(`${SB_URL}/rest/v1/artworks`, {
-        method: 'POST',
-        headers: sbHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
-        body: JSON.stringify({
-          id,
-          title: fields.title,
-          description: fields.description,
-          student: fields.student,
-          lecturer: fields.lecturer,
-          class_name: fields.className,
-          class_code: fields.classCode,
-          period: fields.period,
-          model_url: publicUrl(modelPath),
-          thumbnail_url: thumbnailUrl
-        })
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`Could not save the artwork details (${res.status}). ${txt}`.slice(0, 220));
-      }
-
-      // Confirm the row really exists in Supabase before reporting success
-      const check = await fetch(`${SB_URL}/rest/v1/artworks?id=eq.${id}&select=id`, { headers: sbHeaders() });
-      const rows = check.ok ? await check.json() : [];
-      if (!rows.length) {
-        throw new Error('The artwork was sent but could not be read back from Supabase. Check the "public read artworks" policy.');
-      }
-    }
-
-    async function saveLocally(file, fields, thumbnail) {
-      const id = 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-      await putModel(id, file);
-      const items = loadLocalItems();
-      items.push({ id, ...fields, thumbnail, fileName: file.name, createdAt: Date.now() });
-      try {
-        saveLocalItems(items);
-      } catch (quotaErr) {
-        await deleteModel(id).catch(() => {});
-        throw new Error('Browser storage is full. Delete some uploaded artworks and try again.');
-      }
-      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-    }
-
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      showError('');
-
-      let firstBad = null;
-      form.querySelectorAll('[required]').forEach(field => {
-        const bad = field.type === 'file' ? !field.files.length : !field.value.trim();
-        field.classList.toggle('input-invalid', bad);
-        if (bad && !firstBad) firstBad = field;
-      });
-      if (firstBad) {
-        firstBad.focus();
-        showError('Please fill in all required fields and choose a .glb file.');
-        return;
-      }
-
-      const file = fileInput.files[0];
-      const fd = new FormData(form);
-      const fields = {
-        title: fd.get('title').trim(),
-        description: fd.get('description').trim(),
-        student: fd.get('student').trim(),
-        lecturer: fd.get('lecturer').trim(),
-        className: fd.get('className').trim(),
-        classCode: fd.get('classCode').trim().toUpperCase(),
-        period: fd.get('period').trim()
-      };
-
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Preparing…';
-
-      try {
-        const thumbnail = await captureThumbnail();
-        if (CLOUD) await saveToCloud(file, fields, thumbnail);
-        else await saveLocally(file, fields, thumbnail);
-        location.href = `index.html?added=${CLOUD ? 'shared' : 'local'}`;
-      } catch (err) {
-        console.error(err);
-        showError(err.message || 'Something went wrong while saving. Please try again.');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Save to archive';
-      }
-    });
-
-    form.addEventListener('input', e => e.target.classList.remove('input-invalid'));
-  }
-
-  /* ---------- Boot ---------- */
-
-  // ★ NEW: expose archive helpers to the 3D gallery module (gallery.js)
   window.arArchive = {
     loadAll,
     getModel,
@@ -843,10 +605,7 @@
   };
 
   document.addEventListener('DOMContentLoaded', () => {
-    const tag = $('.site-footer p');
-    if (tag) tag.append(` (${BUILD}, ${CLOUD ? 'shared' : 'local'} mode)`);
     const page = document.body.dataset.page;
     if (page === 'gallery') initGallery();
-    if (page === 'upload') initUpload();
   });
 })();

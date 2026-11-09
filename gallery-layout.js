@@ -1,31 +1,16 @@
 /* ==========================================================
-   gallery-layout.js — pure layout maths for the procedural museum.
-   No Three.js here, so it is easy to test and reuse.
-
-   Local room frame (before rotation by `yaw`):
-     - room interior spans x ∈ [-W/2, W/2], z ∈ [-D/2, D/2]
-     - ENTRANCE door: centre of the south wall  (0, +D/2), outward normal (0, +1)
-     - EXIT door: north / west / east wall, varied per class, outward normal n
-   World frame: x east, z south, y up. Three.js rotation.y = yaw maps
-   a local (x, z) to  (x·cos + z·sin,  −x·sin + z·cos).
-
-   The chain is  [pre] R0 R1 … R(N-1) [post]
-     - "pre"  is a copy of the last room placed in front of R0's entrance
-     - "post" is a copy of the first room placed after R(N-1)'s exit
-   Walking into a copy teleports the player to the identical spot in the
-   real room, so the loop is seamless in both directions.
+   gallery-layout.js — layout math with connecting corridors
    ========================================================== */
 
-export const DOOR_W = 3.2;
+export const DOOR_W = 3.6;
 export const WALL_T = 0.3;
-export const CORR_L = 0;       // doors of consecutive rooms share a wall
+export const CORR_L = 5.0;       // Short hallway to connect class rooms
 export const PLAYER_R = 0.35;
 
 const SIDE_CYCLE = ['N', 'W', 'N', 'E', 'W', 'E'];
-const OFFSETS = [0.18, -0.18, 0, 0.22, -0.22];
+const OFFSETS = [0, -0.15, 0.15];
 const r6 = v => Math.round(v * 1e6) / 1e6;
 
-/* ---------- vector helpers ---------- */
 export function rot(v, yaw) {
   const c = Math.cos(yaw), s = Math.sin(yaw);
   return [r6(v[0] * c + v[1] * s), r6(-v[0] * s + v[1] * c)];
@@ -36,7 +21,6 @@ export function worldOf(P, yaw, v) {
 }
 const sub = (a, b) => [r6(a[0] - b[0]), r6(a[1] - b[1])];
 
-/** Yaw (multiple of 90°) that turns local axis vector `localVec` into `worldVec`. */
 export function yawFor(localVec, worldVec) {
   for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
     const r = rot(localVec, yaw);
@@ -45,10 +29,9 @@ export function yawFor(localVec, worldVec) {
   throw new Error('yawFor: vectors are not axis-aligned');
 }
 
-/* ---------- room design ---------- */
 export function roomDims(count, ci) {
-  const S = Math.min(40, Math.ceil(Math.max(14, 5.2 + (count + 4) * 1.1)));
-  return { W: S + (ci % 3 === 1 ? 4 : 0), D: S };   // every third room is wider (rectangular)
+  const S = Math.min(36, Math.ceil(Math.max(16, 6 + (count + 2) * 1.2)));
+  return { W: S + (ci % 2 === 1 ? 4 : 0), D: S };
 }
 
 export function exitFor(side, W, D, ci) {
@@ -58,7 +41,6 @@ export function exitFor(side, W, D, ci) {
   return { side: 'E', pos: [W / 2, r6(o * D)], normal: [1, 0] };
 }
 
-/* ---------- collision boxes (axis-aligned, include wall thickness) ---------- */
 function boxOf(e) {
   const c = Math.abs(Math.cos(e.yaw)), s = Math.abs(Math.sin(e.yaw));
   const hw = (c * e.W + s * e.D) / 2 + WALL_T;
@@ -78,11 +60,10 @@ export function boxesOverlap(a, b, m = 0.8) {
   return a.x0 < b.x1 + m && a.x1 > b.x0 - m && a.z0 < b.z1 + m && a.z1 > b.z0 - m;
 }
 
-/* ---------- layout planner ---------- */
 export function planLayout(counts, yaw0 = 0, k = 0) {
   const N = counts.length;
   const dims = counts.map((n, i) => roomDims(n, i));
-  const placed = [];                      // { box, tag }
+  const placed = [];
   const entries = [];
   const corridors = [];
   let collisions = 0;
@@ -126,12 +107,10 @@ export function planLayout(counts, yaw0 = 0, k = 0) {
     cur = best.nextRoom;
   }
 
-  /* post room: copy of class 0 after the last main room */
   cur.exit = entries[0].exit;
   entries.push(cur);
   placed.push({ box: boxOf(cur), tag: 'post' });
 
-  /* closed stub leaving the post room's exit */
   {
     const E = worldOf(cur.P, cur.yaw, cur.exit.pos);
     const d = rot(cur.exit.normal, cur.yaw);
@@ -142,12 +121,11 @@ export function planLayout(counts, yaw0 = 0, k = 0) {
     placed.push({ box: sb, tag: 'poststub' });
   }
 
-  /* pre room: copy of the last class in front of R0's entrance */
   {
     const e0 = entries[0];
     const exitLast = entries[N - 1].exit;
     const Q0 = worldOf(e0.P, e0.yaw, [0, e0.D / 2]);
-    const a = rot([0, 1], e0.yaw);                       // outward normal of R0's entrance
+    const a = rot([0, 1], e0.yaw);
     const Epre = [r6(Q0[0] + a[0] * CORR_L), r6(Q0[1] + a[1] * CORR_L)];
     const dPre = [-a[0], -a[1]];
     const ypre = yawFor(exitLast.normal, dPre);
@@ -163,7 +141,6 @@ export function planLayout(counts, yaw0 = 0, k = 0) {
     corridors.unshift({ E: Epre, d: dPre, len: CORR_L, closed: false });
     placed.push({ box: cb, tag: 'precorr' }, { box: pb, tag: 'pre' });
 
-    /* closed stub behind the pre room's entrance */
     const Qp = worldOf(pre.P, pre.yaw, [0, pre.D / 2]);
     const dp = rot([0, 1], pre.yaw);
     const sb = corrBoxOf(Qp, dp, CORR_L);
@@ -175,7 +152,6 @@ export function planLayout(counts, yaw0 = 0, k = 0) {
   return { entries, corridors, collisions };
 }
 
-/** Try every start orientation and side pattern, keep the cleanest layout. */
 export function bestPlan(counts) {
   let best = null;
   for (const yaw0 of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
@@ -188,7 +164,6 @@ export function bestPlan(counts) {
   return best;
 }
 
-/* ---------- walkable area ---------- */
 export function walkRects(plan) {
   const rects = [];
   const m = PLAYER_R + 0.15;
@@ -198,7 +173,7 @@ export function walkRects(plan) {
   });
   const hw = DOOR_W / 2 - PLAYER_R;
   for (const c of plan.corridors) {
-    const a0 = -1.0, a1 = c.closed ? c.len - 0.7 : c.len + 1.0;   // overlap 1 m into the rooms
+    const a0 = -1.0, a1 = c.closed ? c.len - 0.7 : c.len + 1.0;
     const s = [c.E[0] + c.d[0] * a0, c.E[1] + c.d[1] * a0];
     const e = [c.E[0] + c.d[0] * a1, c.E[1] + c.d[1] * a1];
     const padX = c.d[0] === 0 ? hw : 0, padZ = c.d[1] === 0 ? hw : 0;
@@ -210,14 +185,12 @@ export function walkRects(plan) {
   return rects;
 }
 
-/** Re-express a world position + camera yaw from one room copy in another. */
 export function mapPoint(from, to, x, z, yaw) {
   const local = rot([x - from.P[0], z - from.P[1]], -from.yaw);
   const w = rot(local, to.yaw);
   return { x: to.P[0] + w[0], z: to.P[1] + w[1], yaw: yaw + (to.yaw - from.yaw) };
 }
 
-/* ---------- artwork placement ---------- */
 function perimPoint(s, hx, hz) {
   const a = 2 * hx, b = 2 * hz;
   if (s < a) return [-hx + s, -hz];
@@ -226,42 +199,68 @@ function perimPoint(s, hx, hz) {
   s -= a; return [-hx, hz - s];
 }
 
-/** Pedestal slots (local room coords) with a yaw that faces the room centre. */
-export function artSlots(e, n) {
-  const { W, D } = e;
-  const doors = [[0, D / 2], e.exit.pos];
-  const build = spacing => {
-    const rings = [];
-    for (const inset of [2.6, 6.4, 10.2, 14]) {
-      const hx = W / 2 - inset, hz = D / 2 - inset;
-      if (hx < 1.2 || hz < 1.2) break;
-      const per = 4 * (hx + hz);
-      const count = Math.max(4, Math.floor(per / spacing));
-      const step = per / count;
-      const ring = [];
-      for (let i = 0; i < count; i++) {
-        const p = perimPoint(i * step + step / 2, hx, hz);
-        if (doors.some(d => Math.hypot(p[0] - d[0], p[1] - d[1]) < 3.7)) continue;
-        ring.push(p);
-      }
-      rings.push(ring);
-    }
-    return rings;
-  };
-  let rings = build(4.4);
-  if (rings.reduce((a, r) => a + r.length, 0) < n) rings = build(3.4);
+/** Slot layout generator separating 2D Wall slots from 3D Pedestal slots */
+export function artSlots(e, itemsList) {
+  const { W, D, exit } = e;
+  const doors = [
+    { x: 0, z: D / 2 },
+    { x: exit.pos[0], z: exit.pos[1] }
+  ];
 
-  const out = [];
-  for (const ring of rings) {
-    const need = n - out.length;
-    if (need <= 0) break;
-    if (ring.length <= need) { out.push(...ring); continue; }
-    for (let i = 0; i < need; i++) out.push(ring[Math.floor((i * ring.length) / need)]);
+  const isNearDoor = (x, z) => doors.some(d => Math.hypot(x - d.x, z - d.z) < 3.5);
+
+  const wallSlots = [];
+  const insetWall = 0.25;
+
+  // South wall
+  for (let x = -W / 2 + 3; x <= W / 2 - 3; x += 3.8) {
+    if (!isNearDoor(x, D / 2)) wallSlots.push({ x, z: D / 2 - insetWall, yaw: Math.PI });
   }
-  return out.map(p => ({ x: p[0], z: p[1], yaw: Math.atan2(-p[0], -p[1]) }));
+  // North wall
+  for (let x = -W / 2 + 3; x <= W / 2 - 3; x += 3.8) {
+    if (!isNearDoor(x, -D / 2)) wallSlots.push({ x, z: -D / 2 + insetWall, yaw: 0 });
+  }
+  // West wall
+  for (let z = -D / 2 + 3; z <= D / 2 - 3; z += 3.8) {
+    if (!isNearDoor(-W / 2, z)) wallSlots.push({ x: -W / 2 + insetWall, z, yaw: Math.PI / 2 });
+  }
+  // East wall
+  for (let z = -D / 2 + 3; z <= D / 2 - 3; z += 3.8) {
+    if (!isNearDoor(W / 2, z)) wallSlots.push({ x: W / 2 - insetWall, z, yaw: -Math.PI / 2 });
+  }
+
+  const pedestalSlots = [];
+  for (const inset of [3.2, 6.8]) {
+    const hx = W / 2 - inset, hz = D / 2 - inset;
+    if (hx < 1.5 || hz < 1.5) break;
+    const per = 4 * (hx + hz);
+    const count = Math.max(4, Math.floor(per / 4.4));
+    const step = per / count;
+    for (let i = 0; i < count; i++) {
+      const p = perimPoint(i * step + step / 2, hx, hz);
+      if (!isNearDoor(p[0], p[1])) {
+        pedestalSlots.push({ x: p[0], z: p[1], yaw: Math.atan2(-p[0], -p[1]) });
+      }
+    }
+  }
+
+  const assigned = [];
+  let wIdx = 0, pIdx = 0;
+
+  itemsList.forEach(art => {
+    const is2D = art.is2D || !art.modelUrl || art.type === '2d';
+    if (is2D) {
+      const slot = wallSlots[wIdx++] || pedestalSlots[pIdx++] || { x: 0, z: 0, yaw: 0 };
+      assigned.push({ ...slot, is2D: true });
+    } else {
+      const slot = pedestalSlots[pIdx++] || wallSlots[wIdx++] || { x: 0, z: 0, yaw: 0 };
+      assigned.push({ ...slot, is2D: false });
+    }
+  });
+
+  return assigned;
 }
 
-/* ---------- data grouping ---------- */
 export function groupByClass(items) {
   const map = new Map();
   for (const it of items) {

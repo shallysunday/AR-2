@@ -5,10 +5,10 @@
 
 :root {
   --bg: #1F1F1F;
-  --surface: #ffffff;
+  --surface: #393939;
   --ink: #faf9f6;
   --ink-soft: #5d5d58;
-  --line: #e7e5df;
+  --line: #040404;
   --accent: #1b1b1a;
   --accent-ink: #3c3a3a;
   --highlight: #c8553d;
@@ -523,4 +523,21 @@ body.view-3d .site-footer {
   text-align: center;
   line-height: 1.45;
   padding: 0 20px;
+}
+
+/* Helper for displaying 2D Artwork frames inside detail modal */
+.viewer-2d-display {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #2b2d42;
+}
+.viewer-2d-display img {
+  max-height: 80%;
+  max-width: 80%;
+  border: 8px solid #ffffff;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.3);
+  border-radius: 4px;
 }
