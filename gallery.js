@@ -8,13 +8,13 @@ import {
 const MAX_ARTWORKS_3D = 80;
 const CONCURRENT_MODELS = 3;
 const PLAQUE_W = 1.1, PLAQUE_H = 0.72;
-const TALL_WALL_H = 40; // Very very tall wall
+const TALL_WALL_H = 40; // Very tall wall height
 
 // Pastel wall background colors per class
 const CLASS_PASTEL_COLORS = {
-  'IL101': '#F8C8DC', // Illustration: Soft pastel pink/coral
+  'IL101': '#F8C8DC', // Illustration: Soft pastel pink
   'PH101': '#B5EAD7', // Photography: Soft pastel mint teal
-  'AP201': '#FFE5B4', // Advertising Photography: Soft pastel amber/cream
+  'AP201': '#FFE5B4', // Advertising Photography: Soft pastel amber
   'AT201': '#DCD6F7'  // Applied Typography: Soft pastel lavender
 };
 
@@ -179,7 +179,6 @@ function makeWallGradientTexture(pastelHex = '#B5EAD7') {
   c.height = 512;
   const ctx = c.getContext('2d');
 
-  // Linear gradient: bottom pastel color fading up into pure transparent white
   const g = ctx.createLinearGradient(0, 512, 0, 0);
   g.addColorStop(0, pastelHex);
   g.addColorStop(0.35, pastelHex);
@@ -266,7 +265,7 @@ export class ArchitecturalGallery {
   async init() {
     this.scene = new THREE.Scene();
     
-    // Pure White Void Environment to Infinity
+    // Pure White Void Environment
     this.scene.background = new THREE.Color(0xffffff);
     this.scene.fog = new THREE.FogExp2(0xffffff, 0.005);
 
@@ -382,13 +381,13 @@ export class ArchitecturalGallery {
       }
       const wallMat = wallMaterials.get(cls.code);
 
-      // Build Tall Walls (NO Ceiling!)
+      // Build Tall Walls (NO Ceiling)
       this.buildWalls(room, entry, H, wallMat);
 
       // Floating Hanging Light in room center
       this.createFloatingLighting(room, entry.W, entry.D);
 
-      // Signs next to doors
+      // Door Signs
       this.createSign(room, entry, cls.code, cls.name, true, signGeo, signTextures);
 
       // Artworks
@@ -407,7 +406,7 @@ export class ArchitecturalGallery {
       this.scene.add(room);
     }
 
-    // Build Short Connecting Corridors between classes
+    // Build Short Connecting Corridors
     this.buildCorridors(this.plan.corridors, H, wallMaterials.values().next().value || new THREE.MeshLambertMaterial(), floorMat);
 
     if (modelQueue.length) this._loadModelsInBackground(modelQueue);
@@ -415,7 +414,7 @@ export class ArchitecturalGallery {
 
   createFloatingLighting(room, W, D) {
     const lightGroup = new THREE.Group();
-    lightGroup.position.set(0, 5.5, 0); // Suspended floating in center
+    lightGroup.position.set(0, 5.5, 0);
 
     const ringGeo = new THREE.TorusGeometry(1.8, 0.08, 16, 48);
     const ringMat = new THREE.MeshStandardMaterial({
@@ -556,7 +555,7 @@ export class ArchitecturalGallery {
 
     const sign = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: cache.get(code), transparent: true }));
     const wallInset = WALL_T / 2 + 0.04;
-    const signY = 3.2; // Next to/above door archway
+    const signY = 3.2;
 
     if (isEntrance) {
       sign.position.set(DOOR_W / 2 + 1.4, signY, entry.D / 2 - wallInset);
@@ -568,7 +567,6 @@ export class ArchitecturalGallery {
     group.add(sign);
   }
 
-  // 2D Artwork hung on wall in White Frame
   createWallFramedArtwork(group, slot, art, plaqueGeometry, plaqueCache) {
     const artGroup = new THREE.Group();
     artGroup.position.set(slot.x, 2.1, slot.z);
@@ -577,13 +575,11 @@ export class ArchitecturalGallery {
 
     const frameW = 1.7, frameH = 2.1, frameD = 0.08, borderT = 0.12;
 
-    // 1. White Frame
     const frameGeo = new THREE.BoxGeometry(frameW, frameH, frameD);
     const frameMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 });
     const frameMesh = new THREE.Mesh(frameGeo, frameMat);
     artGroup.add(frameMesh);
 
-    // 2. Artwork Surface
     const canvasGeo = new THREE.PlaneGeometry(frameW - borderT * 2, frameH - borderT * 2);
     const canvasTex = art.thumbnail
       ? new THREE.TextureLoader().load(art.thumbnail)
@@ -594,7 +590,6 @@ export class ArchitecturalGallery {
     canvasMesh.position.z = frameD / 2 + 0.005;
     artGroup.add(canvasMesh);
 
-    // 3. Wall Plaque next to frame
     const key = art.id || art.title || Math.random().toString(36);
     if (!plaqueCache.has(key)) {
       const texture = new THREE.CanvasTexture(makePlaqueCanvas(art));
@@ -608,7 +603,6 @@ export class ArchitecturalGallery {
     group.add(artGroup);
   }
 
-  // 3D Artwork on Pedestal
   createPedestal(group, slot, art, pedestalGeometry, pedestalMaterial, plaqueGeometry, plaqueCache, modelQueue) {
     const pedestalGroup = new THREE.Group();
     pedestalGroup.position.set(slot.x, 0, slot.z);
@@ -676,6 +670,206 @@ export class ArchitecturalGallery {
       }
     };
     for (let i = 0; i < Math.min(CONCURRENT_MODELS, queue.length); i++) worker();
+  }
+
+  /* ==========================================================
+     TELEPORT & NAVIGATION PATHFINDING
+     ========================================================== */
+
+  computePath(fromIndex, toIndex) {
+    const entries = this.plan.entries;
+    if (fromIndex === toIndex) return [this.playerPos];
+
+    const entranceOf = entry => worldOf(entry.P, entry.yaw, [0, entry.D / 2]);
+    const exitOf = entry => worldOf(entry.P, entry.yaw, entry.exit.pos);
+
+    const points = [this.playerPos.slice()];
+
+    if (fromIndex < toIndex) {
+      points.push(exitOf(entries[fromIndex]));
+      for (let k = fromIndex; k < toIndex; k++) {
+        points.push(entranceOf(entries[k + 1]));
+        if (k + 1 < toIndex) {
+          points.push(exitOf(entries[k + 1]));
+        }
+      }
+      points.push([entries[toIndex].P[0], entries[toIndex].P[1]]);
+    } else {
+      points.push(entranceOf(entries[fromIndex]));
+      for (let k = fromIndex - 1; k >= toIndex; k--) {
+        points.push(exitOf(entries[k]));
+        if (k > toIndex) {
+          points.push(entranceOf(entries[k]));
+        }
+      }
+      points.push([entries[toIndex].P[0], entries[toIndex].P[1]]);
+    }
+
+    return points;
+  }
+
+  get currentEntryIdx() {
+    for (let i = 0; i < this.plan.entries.length; i++) {
+      const entry = this.plan.entries[i];
+      const halfW = entry.W / 2;
+      const halfD = entry.D / 2;
+      const dx = this.playerPos[0] - entry.P[0];
+      const dz = this.playerPos[1] - entry.P[1];
+      const c = Math.cos(-entry.yaw);
+      const s = Math.sin(-entry.yaw);
+      const lx = dx * c + dz * s;
+      const lz = -dx * s + dz * c;
+
+      if (Math.abs(lx) <= halfW + 1 && Math.abs(lz) <= halfD + 1) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  jumpToClass(classIndex) {
+    if (this.isTransitioning) return;
+
+    const targetIndex = this.plan.entries.findIndex(
+      entry => entry.role === 'main' && entry.ci === classIndex
+    );
+
+    if (targetIndex < 0) return;
+
+    const fromIndex = this.currentEntryIdx;
+    const waypoints = fromIndex >= 0
+      ? this.computePath(fromIndex, targetIndex)
+      : [
+          [this.playerPos[0], this.playerPos[1]],
+          [
+            this.plan.entries[targetIndex].P[0],
+            this.plan.entries[targetIndex].P[1]
+          ]
+        ];
+
+    if (waypoints.length < 2) return;
+
+    const lengths = [];
+    let totalLength = 0;
+
+    for (let i = 1; i < waypoints.length; i++) {
+      const length = Math.hypot(
+        waypoints[i][0] - waypoints[i - 1][0],
+        waypoints[i][1] - waypoints[i - 1][1]
+      );
+      lengths.push(length);
+      totalLength += length;
+    }
+
+    const startYaw = this.playerYaw;
+    const targetYaw = this.plan.entries[targetIndex].yaw + Math.PI;
+    let yawDelta = targetYaw - startYaw;
+
+    while (yawDelta > Math.PI) yawDelta -= 2 * Math.PI;
+    while (yawDelta < -Math.PI) yawDelta += 2 * Math.PI;
+
+    this.isTransitioning = true;
+    this.keys.clear();
+    this.joystick.dx = this.joystick.dy = 0;
+
+    const duration = Math.min(3500, Math.max(900, totalLength * 45));
+    const startTime = performance.now();
+
+    const step = () => {
+      const t = Math.min(1, (performance.now() - startTime) / duration);
+      const eased = t * t * (3 - 2 * t);
+      const targetDistance = eased * totalLength;
+
+      let accumulated = 0;
+      let segmentIndex = lengths.length - 1;
+
+      for (let i = 0; i < lengths.length; i++) {
+        if (accumulated + lengths[i] >= targetDistance) {
+          segmentIndex = i;
+          break;
+        }
+        accumulated += lengths[i];
+      }
+
+      const segmentT = lengths[segmentIndex] > 0
+        ? (targetDistance - accumulated) / lengths[segmentIndex]
+        : 0;
+
+      const p0 = waypoints[segmentIndex];
+      const p1 = waypoints[segmentIndex + 1] || p0;
+
+      this.playerPos = [
+        p0[0] + (p1[0] - p0[0]) * segmentT,
+        p0[1] + (p1[1] - p0[1]) * segmentT
+      ];
+
+      this.playerYaw = startYaw + yawDelta * eased;
+
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        this.isTransitioning = false;
+      }
+    };
+
+    requestAnimationFrame(step);
+  }
+
+  checkLoopTeleport() {
+    const entries = this.plan.entries;
+    if (!entries || !entries.length) return;
+
+    const pre = entries.find(entry => entry.role === 'pre');
+    const post = entries.find(entry => entry.role === 'post');
+    if (!pre || !post) return;
+
+    const inside = entry => {
+      const halfW = entry.W / 2;
+      const halfD = entry.D / 2;
+      const dx = this.playerPos[0] - entry.P[0];
+      const dz = this.playerPos[1] - entry.P[1];
+      const c = Math.cos(-entry.yaw);
+      const s = Math.sin(-entry.yaw);
+      const lx = dx * c + dz * s;
+      const lz = -dx * s + dz * c;
+
+      return (
+        Math.abs(lx) <= halfW - 0.3 &&
+        Math.abs(lz) <= halfD - 0.3
+      );
+    };
+
+    if (inside(pre)) {
+      const lastMain = entries.find(
+        entry => entry.role === 'main' &&
+          entry.ci === this.classes.length - 1
+      );
+      if (lastMain) this.teleportBetween(pre, lastMain);
+    } else if (inside(post)) {
+      const firstMain = entries.find(
+        entry => entry.role === 'main' && entry.ci === 0
+      );
+      if (firstMain) this.teleportBetween(post, firstMain);
+    }
+  }
+
+  teleportBetween(fromEntry, toEntry) {
+    const local = rot(
+      [
+        this.playerPos[0] - fromEntry.P[0],
+        this.playerPos[1] - fromEntry.P[1]
+      ],
+      -fromEntry.yaw
+    );
+
+    const world = rot(local, toEntry.yaw);
+
+    this.playerPos = [
+      toEntry.P[0] + world[0],
+      toEntry.P[1] + world[1]
+    ];
+
+    this.playerYaw += toEntry.yaw - fromEntry.yaw;
   }
 
   setupControls() {
@@ -811,6 +1005,8 @@ export class ArchitecturalGallery {
         if (this.canWalk(nx, nz)) this.playerPos = [nx, nz];
         else if (this.canWalk(nx, this.playerPos[1])) this.playerPos = [nx, this.playerPos[1]];
         else if (this.canWalk(this.playerPos[0], nz)) this.playerPos = [this.playerPos[0], nz];
+
+        this.checkLoopTeleport();
       }
     }
 
