@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#faf9f6">
+  <meta name="theme-color" content="#141414">
   <title>Add Artwork · AR Art &amp; Design Archive</title>
   <link rel="stylesheet" href="style.css">
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
@@ -11,17 +11,24 @@
 <body data-page="upload">
 
   <header class="site-header">
-    <div class="container header-inner">
+    <div class="header-inner">
       <a class="brand" href="index.html" aria-label="Back to archive">
         <span class="brand-mark" aria-hidden="true">◐</span>
         <span class="brand-text">
-          <span class="brand-title">AR Art &amp; Design Archive</span>
-          <span class="brand-sub">Scanned student works in augmented reality</span>
+          <span class="brand-title">AR ART &amp; DESIGN</span>
         </span>
       </a>
-      <nav class="nav">
-        <a class="btn btn-ghost" href="index.html">← Back to archive</a>
+      <nav class="nav-center">
+        <a class="nav-link" href="index.html">CATALOGUE</a>
+        <a class="nav-link" href="index.html">3D GALLERY</a>
+        <a class="nav-link active" href="upload.html">SUBMIT</a>
+        <a class="nav-link" href="index.html">ABOUT</a>
       </nav>
+      <div class="header-actions">
+        <a href="index.html" class="icon-btn" aria-label="Close upload">
+          <svg viewBox="0 0 24 24" class="header-icon" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </a>
+      </div>
     </div>
   </header>
 
@@ -32,15 +39,12 @@
     <p id="modeNote" class="help" style="margin:-12px 0 20px"></p>
 
     <form id="uploadForm" class="form" novalidate>
-
       <fieldset>
         <legend>Artwork</legend>
-
         <div class="form-row">
           <label for="title">Artwork title <span class="req">*</span></label>
           <input id="title" name="title" type="text" required maxlength="100" placeholder="e.g. Letterform Sculpture">
         </div>
-
         <div class="form-row">
           <label for="description">Description</label>
           <textarea id="description" name="description" rows="4" maxlength="800" placeholder="Concept, materials, process…"></textarea>
@@ -49,11 +53,10 @@
 
       <fieldset>
         <legend>People &amp; class</legend>
-
         <div class="form-grid">
           <div class="form-row">
             <label for="student">Student name <span class="req">*</span></label>
-            <input id="student" name="student" type="text" required maxlength="80" autocomplete="name">
+            <input id="student" name="student" type="text" required maxlength="80" value="North West" autocomplete="name">
           </div>
           <div class="form-row">
             <label for="lecturer">Lecturer name <span class="req">*</span></label>
@@ -78,7 +81,6 @@
 
       <fieldset>
         <legend>3D model</legend>
-
         <div class="form-row">
           <label for="modelFile">Model file (.glb) <span class="req">*</span></label>
           <input id="modelFile" name="modelFile" type="file" required>

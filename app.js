@@ -1,5 +1,5 @@
 /* ==========================================================
-   AR Art & Design Archive — app logic
+   AR Art & Design Archive — app logic & database schema
    ========================================================== */
 (() => {
   'use strict';
@@ -11,7 +11,7 @@
   const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
   const SB_URL = (CFG.SUPABASE_URL || '').replace(/\/+$/, '');
   const BUCKET = 'artworks';
-  const BUILD = 'build 6';
+  const BUILD = 'build 8';
   let lastLoadError = '';
 
   let itemsCache = null;
@@ -21,82 +21,94 @@
   const STORE_KEY = 'arArchive.items.v1';
   const DB_NAME = 'arArchiveFiles';
   const DB_STORE = 'models';
-  const MAX_FILE_MB = CLOUD ? 50 : 60;
 
-  /* ---------- Sample artworks (Illustration, Photography, Advertising Photography, Applied Typography) ---------- */
-  const MS = 'https://modelviewer.dev/shared-assets/models/';
+  /* ---------- Sample artworks database ---------- */
   const SAMPLE_ITEMS = [
-    // --- Illustration ---
+    // --- Illustration (2D Framed Wall Artworks) ---
     {
       id: 'sample-il-1',
-      title: 'Character Line & Form',
-      description: 'Digital 2D illustration exploring silhouette, gesture, and linework.',
-      student: 'Alya Putri',
+      title: 'Hemat Energi',
+      description: 'Selamatkan bumi!',
+      student: 'M. Daffa Ardhana',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
       className: 'Illustration',
       classCode: 'IL101',
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#e07a5f',
-      thumbnail: '',
+      thumbnail: 'images/IL1.webp',
       sample: true
     },
     {
       id: 'sample-il-2',
-      title: 'Expressive Creature',
-      description: '3D character sculpture study based on initial illustration concept.',
-      student: 'Rizky Pratama',
+      title: 'Penyu',
+      description: 'Upaya pelestarian penyu di Indonesia.',
+      student: 'Farah Dina Aulia',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
       className: 'Illustration',
       classCode: 'IL101',
       period: 'Odd 2026/2027',
-      is2D: false,
-      modelUrl: MS + 'RobotExpressive.glb',
-      thumbnail: '',
+      is2D: true,
+      artColor: '#81b29a',
+      thumbnail: 'images/IL2.webp',
       sample: true
     },
     {
       id: 'sample-il-3',
-      title: 'Editorial Visual Narrative',
-      description: 'Editorial poster illustration exploring color harmony and rhythm.',
-      student: 'Dimas Wicaksono',
+      title: 'Wardah',
+      description: 'Beauty in Every Shade.',
+      student: 'Nopal',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
       className: 'Illustration',
       classCode: 'IL101',
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#3d405b',
-      thumbnail: '',
+      thumbnail: 'images/IL3.webp',
       sample: true
     },
     {
       id: 'sample-il-4',
-      title: 'Digital Creature Model',
-      description: 'Three-dimensional interpretation of an illustrated mascot.',
-      student: 'Siti Maharani',
+      title: 'Harlette',
+      description: 'All skin type, for everyone.',
+      student: 'Natasya',
       lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
       className: 'Illustration',
       classCode: 'IL101',
       period: 'Odd 2026/2027',
-      is2D: false,
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Fox/glTF-Binary/Fox.glb',
-      thumbnail: '',
+      is2D: true,
+      artColor: '#f2cc8f',
+      thumbnail: 'images/IL4.webp',
+      sample: true
+    },
+    {
+      id: 'sample-il-5',
+      title: 'Wounded Shadow',
+      description: 'Graphic story pacing and panel composition exploring urban myth.',
+      student: 'Diva Nurul Hasanah',
+      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
+      className: 'Illustration',
+      classCode: 'IL101',
+      period: 'Odd 2026/2027',
+      is2D: true,
+      artColor: '#f2cc8f',
+      thumbnail: 'images/IL5.webp',
       sample: true
     },
 
-    // --- Photography ---
+    // --- Photography (2D Framed Wall Artworks) ---
     {
       id: 'sample-ph-1',
-      title: 'Monochrome Geometry',
-      description: 'Architectural photography study focusing on high-contrast shadows.',
+      title: 'In Motion',
+      description: 'Cool car in motion.',
       student: 'Fajar Nugroho',
       lecturer: 'Siti Rahma, M.Sn.',
       className: 'Photography',
       classCode: 'PH101',
       period: 'Odd 2026/2027',
       is2D: true,
-      artColor: '#2b2d42',
-      thumbnail: '',
+      artColor: '#c32222',
+      thumbnail: 'images/PH1.webp',
       sample: true
     },
     {
@@ -110,21 +122,21 @@
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#8d99ae',
-      thumbnail: '',
+      thumbnail: 'images/PH2.webp',
       sample: true
     },
     {
       id: 'sample-ph-3',
-      title: 'Signal Lantern Artifact',
-      description: '3D scan of an antique studio signal lantern light object.',
+      title: 'Street Documentary Series',
+      description: 'Candid portraiture capture of daily life in historic city alleyways.',
       student: 'Kevin Hartono',
       lecturer: 'Siti Rahma, M.Sn.',
       className: 'Photography',
       classCode: 'PH101',
       period: 'Odd 2026/2027',
-      is2D: false,
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Lantern/glTF-Binary/Lantern.glb',
-      thumbnail: '',
+      is2D: true,
+      artColor: '#4a4e69',
+      thumbnail: 'images/PH3.webp',
       sample: true
     },
     {
@@ -137,12 +149,26 @@
       classCode: 'PH101',
       period: 'Odd 2026/2027',
       is2D: true,
-      artColor: '#4a4e69',
-      thumbnail: '',
+      artColor: '#6c5ce7',
+      thumbnail: 'images/PH4.webp',
+      sample: true
+    },
+    {
+      id: 'sample-ph-5',
+      title: 'Broken Reflection',
+      description: 'Reflection of broken tower.',
+      student: 'Laras Ayu',
+      lecturer: 'Siti Rahma, M.Sn.',
+      className: 'Photography',
+      classCode: 'PH101',
+      period: 'Odd 2026/2027',
+      is2D: true,
+      artColor: '#6c5ce7',
+      thumbnail: 'images/PH5.webp',
       sample: true
     },
 
-    // --- Advertising Photography ---
+    // --- Advertising Photography (2D Framed Wall Artworks) ---
     {
       id: 'sample-ap-1',
       title: 'Commercial Beverage Splash',
@@ -154,35 +180,35 @@
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#f4a261',
-      thumbnail: '',
+      thumbnail: 'images/AP1.webp',
       sample: true
     },
     {
       id: 'sample-ap-2',
-      title: 'Hydro Product Bottle',
-      description: 'Commercial 3D packaging bottle model for print and web ad.',
+      title: 'Cosmetics Staging & Reflection',
+      description: 'Luxury perfume product lighting with mirror reflection and soft gradients.',
       student: 'Citra Dewi',
       lecturer: 'Doni Prasetyo, M.Ds.',
       className: 'Advertising Photography',
       classCode: 'AP201',
       period: 'Odd 2026/2027',
-      is2D: false,
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/WaterBottle/glTF-Binary/WaterBottle.glb',
-      thumbnail: '',
+      is2D: true,
+      artColor: '#e76f51',
+      thumbnail: 'images/AP2.webp',
       sample: true
     },
     {
       id: 'sample-ap-3',
-      title: 'Retro Audio Campaign',
-      description: 'Product placement setup featuring a retro sound boombox object.',
+      title: 'Retro Apparel Campaign',
+      description: 'Commercial fashion lookbook staging with vintage studio props.',
       student: 'Nadia Rahma',
       lecturer: 'Doni Prasetyo, M.Ds.',
       className: 'Advertising Photography',
       classCode: 'AP201',
       period: 'Odd 2026/2027',
-      is2D: false,
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/BoomBox/glTF-Binary/BoomBox.glb',
-      thumbnail: '',
+      is2D: true,
+      artColor: '#2a9d8f',
+      thumbnail: 'images/AP3.webp',
       sample: true
     },
     {
@@ -196,30 +222,44 @@
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#264653',
-      thumbnail: '',
+      thumbnail: 'images/AP4.webp',
       sample: true
     },
 
-    // --- Applied Typography ---
+    // --- Applied Typography (3D Pedestal GLB Models) ---
     {
       id: 'sample-at-1',
-      title: 'Expressive Type Poster',
-      description: 'Modular grid breakdown and expressive typographic scale.',
-      student: 'Intan Permata',
+      title: 'Packaging Label Study',
+      description: 'A 3D packaging and typography label study on a water bottle object.',
+      student: 'Nabila Zahra',
       lecturer: 'Maya Anggraini, M.Ds.',
       className: 'Applied Typography',
       classCode: 'AT201',
       period: 'Odd 2026/2027',
-      is2D: true,
-      artColor: '#1d3557',
+      is2D: false,
+      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/WaterBottle/glTF-Binary/WaterBottle.glb',
       thumbnail: '',
       sample: true
     },
     {
       id: 'sample-at-2',
-      title: 'Spatial Letterform Sculpture',
-      description: '3D kinetic typographic object designed for spatial wayfinding.',
-      student: 'Rafi Maulana',
+      title: 'Sound Object Lettering',
+      description: 'Lettering and surface graphics on a retro audio boombox model.',
+      student: 'Kevin Hartono',
+      lecturer: 'Maya Anggraini, M.Ds.',
+      className: 'Applied Typography',
+      classCode: 'AT201',
+      period: 'Odd 2026/2027',
+      is2D: false,
+      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/BoomBox/glTF-Binary/BoomBox.glb',
+      thumbnail: '',
+      sample: true
+    },
+    {
+      id: 'sample-at-3',
+      title: 'Spatial Letterform Form',
+      description: 'Visual communication and volumetric type on organic fruit form.',
+      student: 'Laras Ayu',
       lecturer: 'Maya Anggraini, M.Ds.',
       className: 'Applied Typography',
       classCode: 'AT201',
@@ -230,24 +270,24 @@
       sample: true
     },
     {
-      id: 'sample-at-3',
-      title: 'Experimental Grid & Type',
-      description: 'Editorial layout exploration focusing on asymmetrical typography.',
-      student: 'Dewi Anggraini',
+      id: 'sample-at-4',
+      title: 'Signal Lantern Wayfinding',
+      description: 'Type and light as wayfinding object in three-dimensional space.',
+      student: 'Bayu Aditya',
       lecturer: 'Maya Anggraini, M.Ds.',
       className: 'Applied Typography',
       classCode: 'AT201',
       period: 'Odd 2026/2027',
-      is2D: true,
-      artColor: '#457b9d',
+      is2D: false,
+      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Lantern/glTF-Binary/Lantern.glb',
       thumbnail: '',
       sample: true
     },
     {
-      id: 'sample-at-4',
-      title: 'Mascot Mark in 3D',
-      description: 'Brand typographic mascot translated into 3D volume.',
-      student: 'Alya Putri',
+      id: 'sample-at-5',
+      title: '3D Typographic Mascot Mark',
+      description: 'A mascot mark explored as a 3D volumetric sculpture.',
+      student: 'Citra Dewi',
       lecturer: 'Maya Anggraini, M.Ds.',
       className: 'Applied Typography',
       classCode: 'AT201',
@@ -293,6 +333,7 @@
       req.onerror = () => reject(req.error);
     });
   }
+
   async function idb(mode, fn) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -303,17 +344,14 @@
       tx.onabort = () => { db.close(); reject(tx.error); };
     });
   }
-  const putModel = (id, blob) => idb('readwrite', s => s.put(blob, id));
+
   const getModel = id => idb('readonly', s => s.get(id));
-  const deleteModel = id => idb('readwrite', s => s.delete(id));
 
   function sbHeaders(extra = {}) {
     const h = { apikey: CFG.SUPABASE_ANON_KEY, ...extra };
     if (CFG.SUPABASE_ANON_KEY.startsWith('eyJ')) h.Authorization = 'Bearer ' + CFG.SUPABASE_ANON_KEY;
     return h;
   }
-
-  const publicUrl = path => `${SB_URL}/storage/v1/object/public/${BUCKET}/${path}`;
 
   async function fetchRemoteItems() {
     const controller = new AbortController();
@@ -348,21 +386,6 @@
     } finally {
       clearTimeout(timeoutId);
     }
-  }
-
-  function xhrUpload(path, blob, contentType, onProgress) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${SB_URL}/storage/v1/object/${BUCKET}/${path}`);
-      const headers = sbHeaders({ 'Content-Type': contentType, 'x-upsert': 'false', 'cache-control': 'max-age=31536000' });
-      Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
-      xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
-      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
-        ? resolve()
-        : reject(new Error(`Upload failed (${xhr.status}). ${xhr.responseText || ''}`.slice(0, 200)));
-      xhr.onerror = () => reject(new Error('Network error while uploading. Check your connection and try again.'));
-      xhr.send(blob);
-    });
   }
 
   async function loadAll(forceFresh = false) {
@@ -438,8 +461,25 @@
       select.value = values.includes(current) ? current : '';
     }
 
+    /** Automatically inspect items database to build dynamic class code options */
     function refreshFilterOptions() {
-      fillSelect(classFilter, uniqueSorted(items.map(i => i.classCode)), 'All class codes');
+      const classMap = new Map();
+      items.forEach(i => {
+        if (i.classCode && !classMap.has(i.classCode)) {
+          classMap.set(i.classCode, i.className || i.classCode);
+        }
+      });
+
+      const sortedCodes = [...classMap.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+      const currentCode = classFilter.value;
+      classFilter.replaceChildren(el('option', { value: '', text: 'All classes' }));
+      sortedCodes.forEach(code => {
+        const label = `${code} — ${classMap.get(code)}`;
+        classFilter.append(el('option', { value: code, text: label }));
+      });
+      classFilter.value = sortedCodes.includes(currentCode) ? currentCode : '';
+
       fillSelect(periodFilter, uniqueSorted(items.map(i => i.period)), 'All periods');
       state.code = classFilter.value;
       state.period = periodFilter.value;
@@ -449,7 +489,7 @@
       if (state.code && item.classCode !== state.code) return false;
       if (state.period && item.period !== state.period) return false;
       if (state.q) {
-        const hay = [item.student, item.lecturer, item.title, item.className].map(norm).join(' | ');
+        const hay = [item.student, item.lecturer, item.title, item.className, item.classCode].map(norm).join(' | ');
         if (!hay.includes(norm(state.q))) return false;
       }
       return true;
@@ -515,7 +555,6 @@
     const host = $('#viewerHost');
     const deleteBtn = $('#deleteBtn');
     let activeBlobUrl = null;
-    let lastFocus = null;
 
     async function openDetail(id) {
       const item = items.find(i => i.id === id);
@@ -536,7 +575,6 @@
         }
       }
 
-      lastFocus = document.activeElement;
       $('#detailClass').textContent = item.className;
       $('#detailTitle').textContent = item.title;
       $('#detailDesc').textContent = item.description || 'No description provided.';
@@ -608,4 +646,34 @@
     const page = document.body.dataset.page;
     if (page === 'gallery') initGallery();
   });
+
+  /* Accordion card interactivity and "+ See More" filter connector */
+  document.addEventListener('DOMContentLoaded', () => {
+    const cards = document.querySelectorAll('.accordion-card');
+
+    cards.forEach(card => {
+      card.addEventListener('mouseenter', () => {
+        cards.forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+      });
+
+      card.addEventListener('click', (e) => {
+        cards.forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+
+        // If clicking "+ See More", set class code filter and scroll to archive grid
+        if (e.target.closest('.btn-more')) {
+          const code = card.dataset.classCode;
+          const select = document.getElementById('classFilter');
+          if (select && code) {
+            select.value = code;
+            select.dispatchEvent(new Event('change'));
+            const target = document.getElementById('grid-view-container');
+            if (target) target.scrollIntoView({ behavior: 'smooth' });
+          }
+        }
+      });
+    });
+  });
+
 })();

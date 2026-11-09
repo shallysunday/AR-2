@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#faf9f6">
+  <meta name="theme-color" content="#141414">
   <title>AR Art &amp; Design Archive</title>
 
   <script type="importmap">
@@ -20,22 +20,113 @@
 </head>
 <body data-page="gallery">
 
+  <!-- Header matching the reference design -->
   <header class="site-header">
-    <div class="container header-inner">
+    <div class="header-inner">
+      <!-- Brand / Logo -->
       <a class="brand" href="index.html" aria-label="AR Art &amp; Design Archive home">
         <span class="brand-mark" aria-hidden="true">◐</span>
         <span class="brand-text">
-          <span class="brand-title">AR Art &amp; Design Archive</span>
-          <span class="brand-sub">Scanned student works in augmented reality</span>
+          <span class="brand-title">AR ART &amp; DESIGN</span>
         </span>
       </a>
-      <nav class="nav">
-        <button type="button" id="btn-grid-view" class="btn btn-primary active-tab">Archive Grid</button>
-        <button type="button" id="btn-gallery-view" class="btn btn-ghost">3D Gallery</button>
-        <a class="btn btn-primary" href="upload.html?v=5">+ Add artwork</a>
+
+      <!-- Center Tabs -->
+      <nav class="nav-center" id="mainNav">
+        <button type="button" id="btn-grid-view" class="nav-link active">CATALOGUE</button>
+        <button type="button" id="btn-gallery-view" class="nav-link">3D GALLERY</button>
+        <a class="nav-link" href="upload.html">SUBMIT</a>
+        <button type="button" id="btn-about" class="nav-link">ABOUT</button>
       </nav>
+
+      <!-- Right Action Icons -->
+      <div class="header-actions">
+        <button type="button" id="btn-search-icon" class="icon-btn" aria-label="Search catalogue">
+          <svg viewBox="0 0 24 24" class="header-icon" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </button>
+        <button type="button" id="btn-profile-icon" class="icon-btn" aria-label="Student profile">
+          <svg viewBox="0 0 24 24" class="header-icon" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </button>
+        <button type="button" id="btn-menu-icon" class="icon-btn mobile-menu-toggle" aria-label="Toggle navigation">
+          <svg viewBox="0 0 24 24" class="header-icon" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+      </div>
     </div>
   </header>
+
+  <section class="accordion-section">
+    <div class="accordion-container" id="classAccordion">
+
+      <!-- Card 01: Illustration -->
+      <article class="accordion-card active" data-class-code="IL101" style="--card-color: #89E051;">
+        <div class="card-bg" style="background-image: url('images/IL0.webp');"></div>
+        
+        <div class="card-collapsed">
+          <span class="vertical-title">ILUSTRASI DESAIN</span>
+          <span class="card-num">01</span>
+        </div>
+
+        <div class="card-expanded">
+          <span class="card-badge">2D Class</span>
+          <h3 class="card-title">ILUSTRASI DESAIN</h3>
+          <p class="card-desc">Digital 2D illustration exploring silhouette, gesture, and linework in visual narratives.</p>
+          <button type="button" class="btn-more">+ See More</button>
+        </div>
+      </article>
+
+      <!-- Card 02: Photography -->
+      <article class="accordion-card" data-class-code="PH101" style="--card-color: #E62B2B;">
+        <div class="card-bg" style="background-image: url('images/PH1.webp');"></div>
+        
+        <div class="card-collapsed">
+          <span class="vertical-title">FOTOGRAFI</span>
+          <span class="card-num">02</span>
+        </div>
+
+        <div class="card-expanded">
+          <span class="card-badge">2D Class</span>
+          <h3 class="card-title">FOTOGRAFI</h3>
+          <p class="card-desc">Architectural and high-speed motion photography capturing light, shadow, and tone.</p>
+          <button type="button" class="btn-more">+ See More</button>
+        </div>
+      </article>
+
+      <!-- Card 03: Applied Typography -->
+      <article class="accordion-card" data-class-code="AT201" style="--card-color: #FF75A0;">
+        <div class="card-bg" style="background-image: url('images/AT0.webp');"></div>
+        
+        <div class="card-collapsed">
+          <span class="vertical-title">APPLIED TYPOGRAPHY</span>
+          <span class="card-num">03</span>
+        </div>
+
+        <div class="card-expanded">
+          <span class="card-badge">3D Class</span>
+          <h3 class="card-title">APPLIED TYPOGRAPHY</h3>
+          <p class="card-desc">3D letterform sculptures and kinetic typographic objects designed for spatial environments.</p>
+          <button type="button" class="btn-more">+ See More</button>
+        </div>
+      </article>
+
+      <!-- Card 04: Advertising Photography -->
+      <article class="accordion-card" data-class-code="AP201" style="--card-color: #42E3C6;">
+        <div class="card-bg" style="background-image: url('images/AP1.webp');"></div>
+        
+        <div class="card-collapsed">
+          <span class="vertical-title">ADVERTISING PHOTO</span>
+          <span class="card-num">04</span>
+        </div>
+
+        <div class="card-expanded">
+          <span class="card-badge">2D Class</span>
+          <h3 class="card-title">ADVERTISING PHOTO</h3>
+          <p class="card-desc">Commercial product staging, studio macro lighting, and beverage splash composition.</p>
+          <button type="button" class="btn-more">+ See More</button>
+        </div>
+      </article>
+
+    </div>
+  </section>
 
   <main id="grid-view-container" class="container">
     <section class="controls" aria-label="Search and filters">
@@ -66,7 +157,6 @@
   </main>
 
   <section id="gallery-view-container" style="display: none;">
-
     <div class="gallery-hud">
       <div class="hud-row">
         <span class="hud-instruction">
@@ -99,6 +189,7 @@
     </div>
   </footer>
 
+  <!-- Artwork Detail Modal -->
   <div id="detailModal" class="modal" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
@@ -122,6 +213,58 @@
     </div>
   </div>
 
+  <!-- Student Profile Pop-up Modal -->
+  <div id="profileModal" class="modal" hidden>
+    <div class="modal-backdrop" id="profileBackdrop"></div>
+    <div class="modal-panel profile-panel" role="dialog" aria-modal="true" aria-labelledby="profileName">
+      <button type="button" class="modal-close" id="profileCloseBtn" aria-label="Close profile">×</button>
+      <div class="profile-card">
+        <div class="profile-header">
+          <div class="profile-avatar">NW</div>
+          <div class="profile-meta">
+            <h2 id="profileName" class="profile-name">North West</h2>
+            <span class="profile-badge">Student · Visual Art &amp; Design</span>
+            <p class="profile-id">ID: 2026-NW-8902</p>
+          </div>
+        </div>
+        <div class="profile-body">
+          <div class="profile-stats">
+            <div class="stat-box">
+              <span class="stat-val">5</span>
+              <span class="stat-lbl">Submissions</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-val">4</span>
+              <span class="stat-lbl">Active Courses</span>
+            </div>
+          </div>
+          <div class="profile-courses">
+            <h3>Enrolled Courses</h3>
+            <ul>
+              <li><span class="code">IL101</span> Ilustrasi Desain</li>
+              <li><span class="code">PH101</span> Fotografi</li>
+              <li><span class="code">AT201</span> Applied Typography</li>
+              <li><span class="code">AP201</span> Advertising Photography</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- About Modal -->
+  <div id="aboutModal" class="modal" hidden>
+    <div class="modal-backdrop" id="aboutBackdrop"></div>
+    <div class="modal-panel about-panel" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+      <button type="button" class="modal-close" id="aboutCloseBtn" aria-label="Close about">×</button>
+      <div class="about-card">
+        <h2 id="aboutTitle">About AR Art &amp; Design Archive</h2>
+        <p>This virtual archive features high-resolution student artwork scans and 3D models presented in Augmented Reality.</p>
+        <p>Switch between the <strong>Catalogue</strong> grid and the interactive <strong>3D Gallery</strong> hall to inspect projects in real time.</p>
+      </div>
+    </div>
+  </div>
+
   <script src="config.js?v=5"></script>
   <script src="app.js?v=5"></script>
 
@@ -136,6 +279,59 @@
     const loading = document.getElementById('gallery-loading');
     const loadingText = loading.querySelector('p');
 
+    // Header action buttons & modals
+    const profileBtn = document.getElementById('btn-profile-icon');
+    const profileModal = document.getElementById('profileModal');
+    const profileCloseBtn = document.getElementById('profileCloseBtn');
+    const profileBackdrop = document.getElementById('profileBackdrop');
+
+    const aboutBtn = document.getElementById('btn-about');
+    const aboutModal = document.getElementById('aboutModal');
+    const aboutCloseBtn = document.getElementById('aboutCloseBtn');
+    const aboutBackdrop = document.getElementById('aboutBackdrop');
+
+    const searchIconBtn = document.getElementById('btn-search-icon');
+    const searchInput = document.getElementById('searchInput');
+    const menuBtn = document.getElementById('btn-menu-icon');
+    const mainNav = document.getElementById('mainNav');
+
+    // Profile Pop-up Handlers
+    function openProfile() {
+      profileModal.hidden = false;
+      document.body.classList.add('modal-open');
+    }
+    function closeProfile() {
+      profileModal.hidden = true;
+      document.body.classList.remove('modal-open');
+    }
+    profileBtn?.addEventListener('click', openProfile);
+    profileCloseBtn?.addEventListener('click', closeProfile);
+    profileBackdrop?.addEventListener('click', closeProfile);
+
+    // About Modal Handlers
+    function openAbout() {
+      aboutModal.hidden = false;
+      document.body.classList.add('modal-open');
+    }
+    function closeAbout() {
+      aboutModal.hidden = true;
+      document.body.classList.remove('modal-open');
+    }
+    aboutBtn?.addEventListener('click', openAbout);
+    aboutCloseBtn?.addEventListener('click', closeAbout);
+    aboutBackdrop?.addEventListener('click', closeAbout);
+
+    // Search Icon Click
+    searchIconBtn?.addEventListener('click', () => {
+      btnGrid.click();
+      searchInput?.focus();
+    });
+
+    // Mobile Navigation Toggle
+    menuBtn?.addEventListener('click', () => {
+      mainNav.classList.toggle('open');
+    });
+
     let galleryInstance = null;
     let hardTimer = null;
 
@@ -148,10 +344,8 @@
       gridView.style.display = 'block';
       galleryView.style.display = 'none';
       document.body.classList.remove('view-3d');
-      btnGrid.classList.add('btn-primary', 'active-tab');
-      btnGrid.classList.remove('btn-ghost');
-      btnGallery.classList.add('btn-ghost');
-      btnGallery.classList.remove('btn-primary', 'active-tab');
+      btnGrid.classList.add('active');
+      btnGallery.classList.remove('active');
       if (galleryInstance) galleryInstance.pause();
     });
 
@@ -159,10 +353,8 @@
       gridView.style.display = 'none';
       galleryView.style.display = 'block';
       document.body.classList.add('view-3d');
-      btnGallery.classList.add('btn-primary', 'active-tab');
-      btnGallery.classList.remove('btn-ghost');
-      btnGrid.classList.add('btn-ghost');
-      btnGrid.classList.remove('btn-primary', 'active-tab');
+      btnGallery.classList.add('active');
+      btnGrid.classList.remove('active');
 
       if (galleryInstance) {
         galleryInstance.dispose();
@@ -173,7 +365,6 @@
       loading.classList.remove('is-error');
       loadingText.textContent = 'Loading archive…';
 
-      // Only one fallback text, and it cannot overwrite real progress.
       let progressStarted = false;
       setTimeout(() => {
         if (!loading.hidden && !progressStarted) {
@@ -181,7 +372,6 @@
         }
       }, 1500);
 
-      // Hard safety net — never leave the overlay up longer than 15 s.
       hardTimer = setTimeout(() => {
         if (!loading.hidden) {
           loading.classList.add('is-error');
@@ -226,8 +416,6 @@
           }
         };
 
-        // IMPORTANT: constructing ArchitecturalGallery only sets up its state;
-        // init() must be called to create the renderer and build the museum.
         galleryInstance.init().catch(error => {
           clearTimers();
           console.error('3D gallery initialization failed:', error);
