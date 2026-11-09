@@ -4,13 +4,13 @@
    ========================================================== */
 
 :root {
-  --bg: #faf9f6;
+  --bg: #1F1F1F;
   --surface: #ffffff;
-  --ink: #1b1b1a;
+  --ink: #faf9f6;
   --ink-soft: #5d5d58;
   --line: #e7e5df;
   --accent: #1b1b1a;
-  --accent-ink: #ffffff;
+  --accent-ink: #3c3a3a;
   --highlight: #c8553d;
   --danger: #b3261e;
   --radius: 14px;
