@@ -267,6 +267,60 @@ function makeFloorGridTexture(maxAnisotropy) {
   return t;
 }
 
+// ─── Wayfinder totem canvas: class name big + bold ───────────────────────────
+function makeWayfinderCanvas(className) {
+  const W = 512, H = 512;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Off-white panel
+  ctx.fillStyle = 'rgba(255, 252, 248, 0.97)';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(16, 16, W - 32, H - 32, 32);
+  else ctx.rect(16, 16, W - 32, H - 32);
+  ctx.fill();
+
+  ctx.strokeStyle = '#2a2a28';
+  ctx.lineWidth = 6;
+  ctx.stroke();
+
+  // Thin decorative horizontal rule
+  ctx.strokeStyle = 'rgba(60, 60, 55, 0.18)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(60, H * 0.38); ctx.lineTo(W - 60, H * 0.38);
+  ctx.moveTo(60, H * 0.68); ctx.lineTo(W - 60, H * 0.68);
+  ctx.stroke();
+
+  // "YOU ARE IN" label
+  ctx.fillStyle = '#8a8a82';
+  ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('YOU ARE IN', W / 2, H * 0.26);
+
+  // Class name, large + bold — auto-fit
+  const cleanName = (className || 'Gallery').toUpperCase();
+  let fs = 68;
+  ctx.font = `bold ${fs}px -apple-system, BlinkMacSystemFont, sans-serif`;
+  while (ctx.measureText(cleanName).width > W - 80 && fs > 28) {
+    fs -= 3;
+    ctx.font = `bold ${fs}px -apple-system, BlinkMacSystemFont, sans-serif`;
+  }
+  ctx.fillStyle = '#1b1b1a';
+  ctx.fillText(cleanName, W / 2, H * 0.52);
+
+  // "CURRENT EXHIBITION" subtext
+  ctx.fillStyle = '#8a8a82';
+  ctx.font = '20px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillText('CURRENT EXHIBITION', W / 2, H * 0.78);
+
+  return c;
+}
+
 function makeBlobTexture() {
   const S = 128;
   const c = document.createElement('canvas');
@@ -430,6 +484,7 @@ export class ArchitecturalGallery {
 
       this.buildWalls(room, entry, H, wallMat);
       this.createFloatingLighting(room, entry.W, entry.D);
+      this.addRoomDecor(room, entry, cls.name);
 
       // Sign on top of exit door leading to next room
       const nextCi = (entry.ci + 1) % this.classes.length;
@@ -447,6 +502,7 @@ export class ArchitecturalGallery {
         if (!slot) return;
         if (slot.is2D) {
           this.createWallFramedArtwork(room, slot, art, plaqueGeo, plaqueTextures);
+          this._addRopeBarrier(room, slot);
         } else {
           this.createPedestal(room, slot, art, pedestalGeo, pedestalMat, plaqueGeo, plaqueTextures, modelQueue);
         }
@@ -479,6 +535,262 @@ export class ArchitecturalGallery {
     lightGroup.add(pointLight);
 
     room.add(lightGroup);
+  }
+
+  /**
+   * Add all room decorations: corner plants, wall spot lamps,
+   * rope barriers in front of artworks, and central wayfinder totem.
+   */
+  addRoomDecor(room, entry, className) {
+    const { W, D } = entry;
+    this._addCornerPlants(room, W, D);
+    this._addSpotLamps(room, W, D);
+    this._addWayfinderTotem(room, className);
+  }
+
+  _addCornerPlants(room, W, D) {
+    // 4 room corners, inset 1.4m from walls
+    const inset = 1.4;
+    const corners = [
+      [-W / 2 + inset, -D / 2 + inset],
+      [ W / 2 - inset, -D / 2 + inset],
+      [-W / 2 + inset,  D / 2 - inset],
+      [ W / 2 - inset,  D / 2 - inset],
+    ];
+
+    // Shared materials
+    const potMat   = new THREE.MeshLambertMaterial({ color: 0xd4a373 });  // terracotta
+    const soilMat  = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
+    const stemMat  = new THREE.MeshLambertMaterial({ color: 0x4a7c59 });
+    const leafMat  = new THREE.MeshLambertMaterial({ color: 0x3a8c4e, side: THREE.DoubleSide });
+
+    for (const [cx, cz] of corners) {
+      const g = new THREE.Group();
+      g.position.set(cx, 0, cz);
+
+      // Pot (truncated cone via CylinderGeometry)
+      const pot = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.17, 0.32, 14),
+        potMat
+      );
+      pot.position.y = 0.16;
+      g.add(pot);
+
+      // Soil disc on top
+      const soil = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.21, 0.21, 0.04, 14),
+        soilMat
+      );
+      soil.position.y = 0.34;
+      g.add(soil);
+
+      // Main stem
+      const stem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.035, 1.4, 8),
+        stemMat
+      );
+      stem.position.y = 0.34 + 0.70;
+      g.add(stem);
+
+      // 3-5 large fan leaves fanning outward
+      const leafCount = 4 + (Math.abs(cx + cz) % 2 === 0 ? 1 : 0);
+      for (let i = 0; i < leafCount; i++) {
+        const angle = (i / leafCount) * Math.PI * 2 + Math.PI / 6;
+        const leaf = new THREE.Mesh(
+          new THREE.SphereGeometry(0.42, 6, 4),
+          leafMat
+        );
+        leaf.scale.set(0.28, 0.08, 0.68);
+        leaf.position.set(
+          Math.sin(angle) * 0.52,
+          0.34 + 1.1 + (i % 2 === 0 ? 0.18 : 0),
+          Math.cos(angle) * 0.52
+        );
+        leaf.rotation.y = -angle;
+        leaf.rotation.z = 0.35;
+        g.add(leaf);
+      }
+
+      // Smaller sub-leaves near top
+      for (let i = 0; i < 3; i++) {
+        const angle = (i / 3) * Math.PI * 2;
+        const leaf = new THREE.Mesh(
+          new THREE.SphereGeometry(0.28, 6, 4),
+          leafMat
+        );
+        leaf.scale.set(0.24, 0.07, 0.5);
+        leaf.position.set(
+          Math.sin(angle) * 0.3,
+          0.34 + 1.5,
+          Math.cos(angle) * 0.3
+        );
+        leaf.rotation.y = -angle;
+        leaf.rotation.z = 0.2;
+        g.add(leaf);
+      }
+
+      room.add(g);
+    }
+  }
+
+  _addSpotLamps(room, W, D) {
+    // Wall-mounted spotlights near artworks: one on each non-door wall,
+    // positioned high on the wall pointing downward at painting height.
+    const wallInset = 0.3;
+    const lampY = 7.5;
+    const lampPositions = [
+      { x:  W / 4,  z: -D / 2 + wallInset, ry: 0 },
+      { x: -W / 4,  z: -D / 2 + wallInset, ry: 0 },
+      { x: -W / 2 + wallInset, z:  D / 4,  ry: Math.PI / 2 },
+      { x:  W / 2 - wallInset, z:  D / 4,  ry: -Math.PI / 2 },
+    ];
+
+    const bracketMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    const shadeMat   = new THREE.MeshLambertMaterial({ color: 0xfff8e8, emissive: 0xffe5a0, emissiveIntensity: 1.2, side: THREE.BackSide });
+
+    for (const { x, z, ry } of lampPositions) {
+      const g = new THREE.Group();
+      g.position.set(x, lampY, z);
+      g.rotation.y = ry;
+
+      // Arm bracket extending from wall
+      const arm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.025, 0.55, 6),
+        bracketMat
+      );
+      arm.rotation.z = Math.PI / 2;
+      arm.position.set(0.28, 0, 0);
+      g.add(arm);
+
+      // Lamp head (cone shade pointing downward-forward)
+      const shade = new THREE.Mesh(
+        new THREE.ConeGeometry(0.22, 0.4, 16, 1, true),
+        shadeMat
+      );
+      shade.position.set(0.56, -0.28, 0);
+      shade.rotation.z = -1.1;
+      g.add(shade);
+
+      // Spot light
+      const spot = new THREE.SpotLight(0xfff5cc, 18, 12, Math.PI / 7, 0.4, 1.8);
+      spot.position.set(0.56, -0.28, 0);
+      spot.target.position.set(0.56, -6, 0);
+      g.add(spot);
+      g.add(spot.target);
+
+      room.add(g);
+    }
+  }
+
+  _addWayfinderTotem(room, className) {
+    // Central 4-sided obelisk-ish totem pole with class name on all 4 faces
+
+    const baseMat  = new THREE.MeshLambertMaterial({ color: 0x2a2724 });
+    const poleMatL = new THREE.MeshLambertMaterial({ color: 0xf0ede8 });
+    const poleMatD = new THREE.MeshLambertMaterial({ color: 0xe0ddd8 });
+
+    const g = new THREE.Group();
+    // Offset slightly from dead center so player can pass
+    g.position.set(0, 0, 0);
+
+    // Square base plinth
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.18, 0.6), baseMat);
+    base.position.y = 0.09;
+    g.add(base);
+
+    // Middle plinth step
+    const step = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.5), poleMatD);
+    step.position.y = 0.24;
+    g.add(step);
+
+    // Main column
+    const column = new THREE.Mesh(new THREE.BoxGeometry(0.36, 2.0, 0.36), poleMatL);
+    column.position.y = 0.3 + 1.0;
+    g.add(column);
+
+    // Tapered top cap
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.22, 0.42, 4), baseMat);
+    cap.rotation.y = Math.PI / 4;
+    cap.position.y = 0.3 + 2.0 + 0.21;
+    g.add(cap);
+
+    // Canvas signage texture applied to all 4 faces
+    const tex = new THREE.CanvasTexture(makeWayfinderCanvas(className));
+    tex.colorSpace = THREE.SRGBColorSpace;
+
+    const faceGeo = new THREE.PlaneGeometry(0.32, 1.84);
+    const faceMat = new THREE.MeshBasicMaterial({ map: tex, transparent: false });
+    const faceZ   = 0.182; // just past column face
+
+    // 4 faces
+    [[0, 0, faceZ, 0], [faceZ, 0, 0, Math.PI / 2],
+     [0, 0, -faceZ, Math.PI], [-faceZ, 0, 0, -Math.PI / 2]].forEach(([fx, fy, fz, ry]) => {
+      const face = new THREE.Mesh(faceGeo, faceMat);
+      face.position.set(fx, 0.3 + 1.0, fz);
+      face.rotation.y = ry;
+      g.add(face);
+    });
+
+    // Subtle ambient glow at base
+    const totemLight = new THREE.PointLight(0xfff8ee, 6, 7, 2.0);
+    totemLight.position.set(0, 1.5, 0);
+    g.add(totemLight);
+
+    room.add(g);
+  }
+
+  /**
+   * Add a rope barrier in front of a wall artwork slot.
+   * Two low brass posts with a catenary red velvet rope between them.
+   */
+  _addRopeBarrier(room, slot) {
+    const postMat = new THREE.MeshLambertMaterial({ color: 0xb8963c }); // brass
+    const ropeMat = new THREE.MeshLambertMaterial({ color: 0x8b1a1a }); // deep red velvet rope
+
+    // The artwork's yaw points INTO the wall (facing viewer).
+    // "Forward" into the room from the artwork = wall inward direction.
+    // yaw=0 (N wall) → faces +Z; yaw=PI (S wall) → faces -Z etc.
+    const fwdOffset = 1.3;  // metres in front of wall
+    const halfW = 0.75;     // half-span of rope (1.5m total barrier width)
+
+    // Forward direction in room XZ (from wall inward toward room centre)
+    const fwdX = Math.sin(slot.yaw) * fwdOffset;
+    const fwdZ = Math.cos(slot.yaw) * fwdOffset;
+
+    // Perpendicular direction (barrier spans left-right relative to artwork face)
+    const perpX =  Math.cos(slot.yaw) * halfW;
+    const perpZ = -Math.sin(slot.yaw) * halfW;
+
+    const postH = 1.1;
+    const postGeo = new THREE.CylinderGeometry(0.03, 0.03, postH, 10);
+    const knobGeo = new THREE.SphereGeometry(0.055, 10, 8);
+
+    for (const side of [-1, 1]) {
+      const px = slot.x + fwdX + perpX * side;
+      const pz = slot.z + fwdZ + perpZ * side;
+
+      const post = new THREE.Mesh(postGeo, postMat);
+      post.position.set(px, postH / 2, pz);
+      room.add(post);
+
+      const knob = new THREE.Mesh(knobGeo, postMat);
+      knob.position.set(px, postH, pz);
+      room.add(knob);
+    }
+
+    // Rope tube from left to right post with a gentle sag
+    const p1x = slot.x + fwdX - perpX;
+    const p1z = slot.z + fwdZ - perpZ;
+    const p2x = slot.x + fwdX + perpX;
+    const p2z = slot.z + fwdZ + perpZ;
+
+    const ropePath = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(p1x, postH - 0.08, p1z),
+      new THREE.Vector3((p1x + p2x) / 2, postH - 0.14, (p1z + p2z) / 2),
+      new THREE.Vector3(p2x, postH - 0.08, p2z),
+    ]);
+    const ropeGeo = new THREE.TubeGeometry(ropePath, 16, 0.025, 8, false);
+    room.add(new THREE.Mesh(ropeGeo, ropeMat));
   }
 
   buildArchedTunnel(length) {
