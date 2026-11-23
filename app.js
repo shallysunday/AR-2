@@ -22,6 +22,7 @@
   const DB_NAME = 'arArchiveFiles';
   const DB_STORE = 'models';
 
+  
   /* ---------- Sample artworks database ---------- */
   const SAMPLE_ITEMS = [
     // --- Illustration (2D Framed Wall Artworks) ---
