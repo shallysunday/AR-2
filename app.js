@@ -702,6 +702,10 @@
     const fileInput = $('#modelFile');
     const previewBox = $('#previewBox');
     const viewer = $('#previewViewer');
+    const previewImage = $('#previewImage');
+    const fileLabel = $('#fileLabel');
+    const fileHelp = $('#fileHelp');
+    const previewLabel = $('#previewLabel');
     const errorBox = $('#formError');
     const submitBtn = $('#submitBtn');
     const modeNote = $('#modeNote');
@@ -741,9 +745,54 @@
       }
     };
 
-    // When a Class is picked, show Class Code options
+    const isTipografi = cls => (cls || '').trim().toLowerCase() === 'tipografi aplikatif';
+
+    function updateFileAcceptance() {
+      const cls = classSelect.value;
+      const requires3D = isTipografi(cls);
+
+      if (requires3D) {
+        fileInput.accept = '.glb,model/gltf-binary';
+        if (fileLabel) fileLabel.innerHTML = '3D Model File (.glb) <span class="req">*</span>';
+        if (fileHelp) fileHelp.innerHTML = 'Choose a <strong>.glb</strong> file (exported from Scaniverse or Blender). Maximum file size: <strong>50 MB</strong>.';
+        if (previewLabel) previewLabel.textContent = 'Preview — rotate it to choose the thumbnail angle';
+      } else {
+        fileInput.accept = '.png,.jpg,.jpeg,image/png,image/jpeg';
+        if (fileLabel) fileLabel.innerHTML = 'Artwork Image (PNG / JPEG) <span class="req">*</span>';
+        if (fileHelp) fileHelp.innerHTML = 'Choose a <strong>PNG or JPEG</strong> image file. Maximum file size: <strong>5 MB</strong>.';
+        if (previewLabel) previewLabel.textContent = 'Artwork Image Preview';
+      }
+    }
+
+    function checkFormValidity() {
+      const requiredInputs = Array.from(form.querySelectorAll('[required]'));
+      const allFilled = requiredInputs.every(field => {
+        if (field.type === 'file') {
+          return field.files && field.files.length > 0;
+        }
+        return field.value && field.value.trim().length > 0;
+      });
+      submitBtn.disabled = !allFilled;
+    }
+
+    // Initialize file acceptance based on initial selection (or default)
+    updateFileAcceptance();
+    checkFormValidity();
+
+    // When a Class is picked, show Class Code options and update file acceptance
     classSelect.addEventListener('change', () => {
       const selectedClass = classSelect.value;
+      updateFileAcceptance();
+
+      // Clear file input if format requirement changes
+      if (fileInput.files.length > 0) {
+        fileInput.value = '';
+        if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+        if (previewBox) previewBox.hidden = true;
+        if (viewer) viewer.hidden = true;
+        if (previewImage) previewImage.hidden = true;
+      }
+
       classCodeSelect.innerHTML = '<option value="">Select Class Code…</option>';
       lecturerInput.value = '';
       lecturerRow.hidden = true;
@@ -762,6 +811,7 @@
         classCodeRow.hidden = true;
         classCodeSelect.required = false;
       }
+      checkFormValidity();
     });
 
     // When Class Code is picked, auto-assign Lecturer
@@ -775,10 +825,12 @@
         lecturerInput.value = '';
         lecturerRow.hidden = true;
       }
+      checkFormValidity();
     });
 
     let previewUrl = null;
     let modelReady = false;
+    let image2DDataUrl = null;
 
     if (modeNote) {
       modeNote.textContent = CLOUD
@@ -795,23 +847,63 @@
     fileInput.addEventListener('change', () => {
       showError('');
       modelReady = false;
+      image2DDataUrl = null;
       if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
       const file = fileInput.files[0];
-      if (!file) { previewBox.hidden = true; return; }
+      if (!file) {
+        previewBox.hidden = true;
+        checkFormValidity();
+        return;
+      }
 
-      if (!/\.glb$/i.test(file.name)) {
-        fileInput.value = ''; previewBox.hidden = true;
-        showError('Please choose a .glb file (export as GLB from Scaniverse or Blender).');
-        return;
+      const requires3D = isTipografi(classSelect.value);
+
+      if (requires3D) {
+        if (!/\.glb$/i.test(file.name)) {
+          fileInput.value = ''; previewBox.hidden = true;
+          showError('Please choose a .glb file (export as GLB from Scaniverse or Blender).');
+          checkFormValidity();
+          return;
+        }
+        if (file.size > 50 * 1024 * 1024) {
+          fileInput.value = ''; previewBox.hidden = true;
+          showError('That file is larger than 50 MB. Please use a smaller model.');
+          checkFormValidity();
+          return;
+        }
+        previewUrl = URL.createObjectURL(file);
+        viewer.setAttribute('src', previewUrl);
+        viewer.hidden = false;
+        if (previewImage) previewImage.hidden = true;
+        previewBox.hidden = false;
+      } else {
+        if (!/\.(png|jpe?g)$/i.test(file.name)) {
+          fileInput.value = ''; previewBox.hidden = true;
+          showError('Please choose a PNG or JPEG image file.');
+          checkFormValidity();
+          return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+          fileInput.value = ''; previewBox.hidden = true;
+          showError('That image is larger than 5 MB. Please compress or choose a smaller image.');
+          checkFormValidity();
+          return;
+        }
+        previewUrl = URL.createObjectURL(file);
+        if (previewImage) {
+          previewImage.src = previewUrl;
+          previewImage.hidden = false;
+        }
+        viewer.hidden = true;
+        previewBox.hidden = false;
+
+        // Read image to dataURL for thumbnail generation
+        const reader = new FileReader();
+        reader.onload = ev => { image2DDataUrl = ev.target.result; };
+        reader.readAsDataURL(file);
       }
-      if (file.size > MAX_FILE_MB * 1024 * 1024) {
-        fileInput.value = ''; previewBox.hidden = true;
-        showError(`That file is larger than ${MAX_FILE_MB} MB. Please use a smaller model.`);
-        return;
-      }
-      previewUrl = URL.createObjectURL(file);
-      viewer.setAttribute('src', previewUrl);
-      previewBox.hidden = false;
+
+      checkFormValidity();
     });
 
     window.addEventListener('beforeunload', () => {
@@ -832,7 +924,16 @@
       })();
     });
 
-    async function captureThumbnail() {
+    async function captureThumbnail(is2D, file) {
+      if (is2D) {
+        if (image2DDataUrl) return image2DDataUrl;
+        return new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onload = e => resolve(e.target.result);
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(file);
+        });
+      }
       try {
         if (!(await waitForModel())) return '';
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -856,17 +957,29 @@
       }
     }
 
-    async function saveToCloud(file, fields, thumbnail) {
+    async function saveToCloud(file, fields, thumbnail, is2D) {
       const id = newId();
-      const modelPath = `models/${id}.glb`;
-      const thumbPath = `thumbs/${id}.jpg`;
+      let modelPath = '';
+      let thumbPath = `thumbs/${id}.jpg`;
+      const ext = file.name.split('.').pop().toLowerCase();
 
-      await xhrUpload(modelPath, file, 'model/gltf-binary', p => {
-        submitBtn.textContent = `Uploading model ${Math.round(p * 100)}%…`;
-      });
+      if (is2D) {
+        const imgPath = `images/${id}.${ext === 'png' ? 'png' : 'jpg'}`;
+        await xhrUpload(imgPath, file, file.type || (ext === 'png' ? 'image/png' : 'image/jpeg'), p => {
+          submitBtn.textContent = `Uploading artwork ${Math.round(p * 100)}%…`;
+        });
+        thumbPath = imgPath;
+      } else {
+        modelPath = `models/${id}.glb`;
+        await xhrUpload(modelPath, file, 'model/gltf-binary', p => {
+          submitBtn.textContent = `Uploading model ${Math.round(p * 100)}%…`;
+        });
+      }
 
       let thumbnailUrl = '';
-      if (thumbnail) {
+      if (is2D) {
+        thumbnailUrl = publicUrl(thumbPath);
+      } else if (thumbnail) {
         try {
           submitBtn.textContent = 'Saving thumbnail…';
           const thumbBlob = await (await fetch(thumbnail)).blob();
@@ -880,21 +993,26 @@
       submitBtn.textContent = 'Publishing…';
       const studentDisplayName = fields.nim ? `${fields.student} (${fields.nim})` : fields.student;
 
+      const payload = {
+        id,
+        title: fields.title,
+        description: fields.description,
+        student: studentDisplayName,
+        lecturer: fields.lecturer,
+        class_name: fields.className,
+        class_code: fields.classCode,
+        period: fields.period,
+        model_url: is2D ? '' : publicUrl(modelPath),
+        thumbnail_url: thumbnailUrl
+      };
+      if (is2D) {
+        payload.is_2d = true;
+      }
+
       const res = await fetch(`${SB_URL}/rest/v1/artworks`, {
         method: 'POST',
         headers: sbHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
-        body: JSON.stringify({
-          id,
-          title: fields.title,
-          description: fields.description,
-          student: studentDisplayName,
-          lecturer: fields.lecturer,
-          class_name: fields.className,
-          class_code: fields.classCode,
-          period: fields.period,
-          model_url: publicUrl(modelPath),
-          thumbnail_url: thumbnailUrl
-        })
+        body: JSON.stringify(payload)
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
@@ -902,9 +1020,11 @@
       }
     }
 
-    async function saveLocally(file, fields, thumbnail) {
+    async function saveLocally(file, fields, thumbnail, is2D) {
       const id = 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-      await putModel(id, file);
+      if (!is2D) {
+        await putModel(id, file);
+      }
       const studentDisplayName = fields.nim ? `${fields.student} (${fields.nim})` : fields.student;
       const items = loadLocalItems();
       items.unshift({
@@ -920,12 +1040,13 @@
         period: fields.period,
         thumbnail,
         fileName: file.name,
+        is2D: !!is2D,
         createdAt: Date.now()
       });
       try {
         saveLocalItems(items);
       } catch (quotaErr) {
-        await deleteModel(id).catch(() => {});
+        if (!is2D) await deleteModel(id).catch(() => {});
         throw new Error('Browser storage is full. Please delete some local artworks.');
       }
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
@@ -943,7 +1064,7 @@
       });
       if (firstBad) {
         firstBad.focus();
-        showError('Please fill in all required fields and choose a .glb file.');
+        showError('Please fill in all required fields and choose a valid file.');
         return;
       }
 
@@ -960,15 +1081,17 @@
         lecturer: (fd.get('lecturer') || '').trim()
       };
 
+      const is2D = !isTipografi(fields.className);
+
       submitBtn.disabled = true;
       submitBtn.textContent = 'Processing…';
 
       try {
-        const thumbnail = await captureThumbnail();
+        const thumbnail = await captureThumbnail(is2D, file);
         if (CLOUD) {
-          await saveToCloud(file, fields, thumbnail);
+          await saveToCloud(file, fields, thumbnail, is2D);
         } else {
-          await saveLocally(file, fields, thumbnail);
+          await saveLocally(file, fields, thumbnail, is2D);
         }
         location.href = 'index.html?added=1';
       } catch (err) {
@@ -979,8 +1102,14 @@
       }
     });
 
-    form.addEventListener('input', e => e.target.classList.remove('input-invalid'));
-    form.addEventListener('change', e => e.target.classList.remove('input-invalid'));
+    form.addEventListener('input', e => {
+      e.target.classList.remove('input-invalid');
+      checkFormValidity();
+    });
+    form.addEventListener('change', e => {
+      e.target.classList.remove('input-invalid');
+      checkFormValidity();
+    });
   }
 
   window.arArchive = {

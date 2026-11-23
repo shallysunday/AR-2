@@ -3,10 +3,10 @@
    ========================================================== */
 
 :root {
-  --bg: #333333;
-  --header-bg: #242424;
-  --surface: #444444;
-  --surface-raised: #4d4d4d;
+  --bg: #1a1a1a;
+  --header-bg: #121212;
+  --surface: #121212;
+  --surface-raised: #333333;
   --ink: #f1f1f1;
   --ink-soft: #a0a0a0;
   --line: transparent;
@@ -202,6 +202,13 @@ a { color: inherit; text-decoration: none; }
 .btn:active { transform: scale(.97); }
 .btn-primary { background: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover { background: #e0e0e0; }
+.btn-primary:disabled, .btn-primary[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+  background: #666666;
+  color: #aaaaaa;
+}
 .btn-ghost { background: rgba(255, 255, 255, 0.08); color: var(--ink); border: none; }
 .btn-ghost:hover { background: rgba(255, 255, 255, 0.16); }
 .btn-danger { background: rgba(179,38,30,0.15); color: var(--danger); border: none; }
@@ -543,6 +550,21 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--i
 .viewer-wrap { background: #0d0d0d; }
 .viewer-host { position: relative; width: 100%; height: 50vh; min-height: 280px; }
 .viewer-host model-viewer { width: 100%; height: 100%; background: transparent; }
+.viewer-2d-display {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.viewer-2d-display img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+}
 .viewer-hint { margin: 0; padding: 8px 16px 12px; text-align: center; font-size: 12px; color: var(--ink-soft); }
 
 .detail-info { padding: 28px 24px; }
@@ -866,6 +888,14 @@ input[type="file"]::file-selector-button:hover {
   border-radius: var(--radius-sm);
   background: radial-gradient(circle at center, #262626 0%, #161616 100%);
   --poster-color: transparent;
+}
+#previewImage {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: #1e1e1e;
+  display: block;
 }
 
 .form-error {
