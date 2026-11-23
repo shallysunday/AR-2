@@ -315,7 +315,7 @@
       id: 'sample-at-7',
       title: 'Test 002',
       description: 'Testing file',
-      student: 'Ganjar',
+      student: 'Ganjar Tiga',
       lecturer: 'Maya Anggraini, M.Ds.',
       className: 'Applied Typography',
       classCode: 'AT201',
@@ -325,6 +325,7 @@
       thumbnail: '',
       sample: true
     }
+
   ].map((item, i) => ({ ...item, createdAt: Date.now() - (i + 1) * 86400000 }));
 
   function loadLocalItems() {
