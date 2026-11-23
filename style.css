@@ -196,10 +196,11 @@ a { color: inherit; text-decoration: none; }
 
 /* ---------- Student Profile Modal ---------- */
 .profile-panel {
-  max-width: 600px !important;
+  display: block !important;
+  max-width: 480px !important;
   border-radius: 24px !important;
   background: #1a1a1a !important;
-  /* border: 1px solid rgba(255, 255, 255, 0.12); */
+  border: 1px solid rgba(255, 255, 255, 0.12);
   padding: 32px 28px !important;
 }
 
@@ -212,13 +213,15 @@ a { color: inherit; text-decoration: none; }
 }
 
 .profile-avatar {
-  width: 64px;
-  height: 64px;
+  width: 68px;
+  height: 68px;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
   background: #242424;
-  box-shadow: 0 4px 14px rgba(137, 224, 81, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
 .profile-avatar img {
@@ -293,7 +296,7 @@ a { color: inherit; text-decoration: none; }
 .about-logo {
   height: 56px;
   width: auto;
-  margin-bottom: 24px;
+  margin-bottom: 50px;
   object-fit: contain;
 }
 
