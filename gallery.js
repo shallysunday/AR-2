@@ -267,56 +267,155 @@ function makeFloorGridTexture(maxAnisotropy) {
   return t;
 }
 
-// ─── Wayfinder totem canvas: class name big + bold ───────────────────────────
+// ─── Wayfinder totem canvas: class name big + bold (Aspect ratio: 560x1840 -> 1:3.2857) ───
 function makeWayfinderCanvas(className) {
-  const W = 512, H = 512;
+  const W = 560, H = 1840;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
 
   ctx.clearRect(0, 0, W, H);
 
-  // Off-white panel
-  ctx.fillStyle = 'rgba(255, 252, 248, 0.97)';
+  // Sleek dark museum monolith panel background
+  ctx.fillStyle = '#141416';
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle interior frame
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(18, 18, W - 36, H - 36);
+
+  // Top emblem: Minimalist stylized gallery beacon
+  const cx = W / 2;
+  ctx.strokeStyle = '#c5a059'; // warm champagne gold
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(16, 16, W - 32, H - 32, 32);
-  else ctx.rect(16, 16, W - 32, H - 32);
+  ctx.arc(cx, 130, 22, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = '#c5a059';
+  ctx.beginPath();
+  ctx.arc(cx, 130, 7, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = '#2a2a28';
-  ctx.lineWidth = 6;
-  ctx.stroke();
-
-  // Thin decorative horizontal rule
-  ctx.strokeStyle = 'rgba(60, 60, 55, 0.18)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(60, H * 0.38); ctx.lineTo(W - 60, H * 0.38);
-  ctx.moveTo(60, H * 0.68); ctx.lineTo(W - 60, H * 0.68);
-  ctx.stroke();
-
-  // "YOU ARE IN" label
-  ctx.fillStyle = '#8a8a82';
-  ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, sans-serif';
+  // Top header text
+  ctx.fillStyle = '#a1a1aa';
+  ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('YOU ARE IN', W / 2, H * 0.26);
+  ctx.fillText('VIRTUAL ARCHIVE · DKV', cx, 185);
 
-  // Class name, large + bold — auto-fit
-  const cleanName = (className || 'Gallery').toUpperCase();
-  let fs = 68;
-  ctx.font = `bold ${fs}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  while (ctx.measureText(cleanName).width > W - 80 && fs > 28) {
-    fs -= 3;
-    ctx.font = `bold ${fs}px -apple-system, BlinkMacSystemFont, sans-serif`;
+  // Divider
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(60, 230); ctx.lineTo(W - 60, 230);
+  ctx.stroke();
+
+  // "CURRENT EXHIBITION" badge
+  const badgeY = 320;
+  ctx.fillStyle = 'rgba(197, 160, 89, 0.14)';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(cx - 115, badgeY - 20, 230, 40, 20);
+  else ctx.rect(cx - 115, badgeY - 20, 230, 40);
+  ctx.fill();
+
+  ctx.strokeStyle = '#c5a059';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.fillStyle = '#d4af37';
+  ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('CURRENT EXHIBITION', cx, badgeY);
+
+  // Main Class Name in Bold, Clean Typography (dynamically word-wrapped so it never stretches or truncates)
+  const cleanName = (className || 'Exhibition Hall').toUpperCase();
+  const words = cleanName.split(' ');
+  const lines = [];
+  let currentLine = '';
+
+  let fontSize = 50;
+  ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (ctx.measureText(testLine).width > W - 80) {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
   }
-  ctx.fillStyle = '#1b1b1a';
-  ctx.fillText(cleanName, W / 2, H * 0.52);
+  if (currentLine) lines.push(currentLine);
 
-  // "CURRENT EXHIBITION" subtext
-  ctx.fillStyle = '#8a8a82';
-  ctx.font = '20px -apple-system, BlinkMacSystemFont, sans-serif';
-  ctx.fillText('CURRENT EXHIBITION', W / 2, H * 0.78);
+  while (lines.some(l => ctx.measureText(l).width > W - 70) && fontSize > 26) {
+    fontSize -= 2;
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  }
+
+  const nameStartY = 500;
+  const lineSpacing = fontSize * 1.25;
+  ctx.fillStyle = '#ffffff';
+
+  lines.forEach((l, i) => {
+    ctx.fillText(l, cx, nameStartY + i * lineSpacing);
+  });
+
+  const lastLineY = nameStartY + (lines.length - 1) * lineSpacing;
+
+  // Gold accent bar below class name
+  const accentY = lastLineY + 55;
+  ctx.fillStyle = '#c5a059';
+  ctx.fillRect(cx - 45, accentY, 90, 4);
+
+  // Minimalist floorplan compass glyph
+  const glyphY = accentY + 230;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, glyphY, 65, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Subtle crosshair
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.beginPath();
+  ctx.moveTo(cx - 90, glyphY); ctx.lineTo(cx + 90, glyphY);
+  ctx.moveTo(cx, glyphY - 90); ctx.lineTo(cx, glyphY + 90);
+  ctx.stroke();
+
+  // 4 cardinal gallery door indicators
+  ctx.fillStyle = '#c5a059';
+  [
+    [cx, glyphY - 65], // North
+    [cx + 65, glyphY], // East
+    [cx, glyphY + 65], // South
+    [cx - 65, glyphY]  // West
+  ].forEach(([px, py]) => {
+    ctx.beginPath();
+    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Navigation instructions
+  const guideY = glyphY + 220;
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '600 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('INTERACTIVE GALLERY', cx, guideY);
+
+  ctx.fillStyle = '#8e8e93';
+  ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Walk up to any artwork to inspect', cx, guideY + 32);
+  ctx.fillText('Look for overhead door signs to navigate', cx, guideY + 58);
+
+  // Subtle bottom footer
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
+  ctx.beginPath();
+  ctx.moveTo(60, H - 120); ctx.lineTo(W - 60, H - 120);
+  ctx.stroke();
+
+  ctx.fillStyle = '#52525b';
+  ctx.font = '500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('DKV CURATED EXHIBITION · ROOM WAYFINDER', cx, H - 75);
 
   return c;
 }
@@ -538,202 +637,224 @@ export class ArchitecturalGallery {
   }
 
   /**
-   * Add all room decorations: corner plants, wall spot lamps,
-   * rope barriers in front of artworks, and central wayfinder totem.
+   * Add room decorations: architectural plants in corners and central minimalist wayfinder totem.
+   * (Artwork picture lamps are mounted directly above every artwork).
    */
   addRoomDecor(room, entry, className) {
     const { W, D } = entry;
     this._addCornerPlants(room, W, D);
-    this._addSpotLamps(room, W, D);
     this._addWayfinderTotem(room, className);
   }
 
   _addCornerPlants(room, W, D) {
-    // 4 room corners, inset 1.4m from walls
     const inset = 1.4;
     const corners = [
-      [-W / 2 + inset, -D / 2 + inset],
-      [ W / 2 - inset, -D / 2 + inset],
-      [-W / 2 + inset,  D / 2 - inset],
-      [ W / 2 - inset,  D / 2 - inset],
+      [-W / 2 + inset, -D / 2 + inset, Math.PI * 0.25],
+      [ W / 2 - inset, -D / 2 + inset, -Math.PI * 0.25],
+      [-W / 2 + inset,  D / 2 - inset, Math.PI * 0.75],
+      [ W / 2 - inset,  D / 2 - inset, -Math.PI * 0.75],
     ];
 
-    // Shared materials
-    const potMat   = new THREE.MeshLambertMaterial({ color: 0xd4a373 });  // terracotta
-    const soilMat  = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
-    const stemMat  = new THREE.MeshLambertMaterial({ color: 0x4a7c59 });
-    const leafMat  = new THREE.MeshLambertMaterial({ color: 0x3a8c4e, side: THREE.DoubleSide });
+    // Shared materials for architectural fiddle-leaf fig in ceramic planter
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x4a3427, roughness: 0.7 });
+    const ceramicMat = new THREE.MeshStandardMaterial({ color: 0xf5f3ee, roughness: 0.25 });
+    const soilMat = new THREE.MeshLambertMaterial({ color: 0x2b1e17 });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a483a, roughness: 0.8 });
+    const stemMat = new THREE.MeshStandardMaterial({ color: 0x3d5a34, roughness: 0.5 });
+    const leafMatDark = new THREE.MeshStandardMaterial({ color: 0x1d4a27, roughness: 0.35, side: THREE.DoubleSide });
+    const leafMatLight = new THREE.MeshStandardMaterial({ color: 0x2e6b3b, roughness: 0.35, side: THREE.DoubleSide });
 
-    for (const [cx, cz] of corners) {
+    // Sculpted organic leaf geometry with 3D curvature
+    const leafShape = new THREE.Shape();
+    leafShape.moveTo(0, 0);
+    leafShape.quadraticCurveTo(0.16, 0.22, 0.20, 0.50);
+    leafShape.quadraticCurveTo(0.12, 0.80, 0, 0.95);
+    leafShape.quadraticCurveTo(-0.12, 0.80, -0.20, 0.50);
+    leafShape.quadraticCurveTo(-0.16, 0.22, 0, 0);
+
+    const baseLeafGeo = new THREE.ShapeGeometry(leafShape, 8);
+    const pos = baseLeafGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      const x = pos.getX(i);
+      pos.setZ(i, -0.06 * Math.sin((y / 0.95) * Math.PI) + 0.12 * Math.abs(x));
+    }
+    baseLeafGeo.computeVertexNormals();
+
+    for (const [cx, cz, baseAngle] of corners) {
       const g = new THREE.Group();
       g.position.set(cx, 0, cz);
+      g.rotation.y = baseAngle;
 
-      // Pot (truncated cone via CylinderGeometry)
+      // 1. Scandinavian Walnut Plant Stand
+      const legR = 0.014;
+      const legH = 0.42;
+      const legDist = 0.21;
+      const legGeo = new THREE.CylinderGeometry(legR, legR, legH, 10);
+
+      const legPositions = [
+        [-legDist, -legDist], [legDist, -legDist],
+        [-legDist, legDist], [legDist, legDist]
+      ];
+      legPositions.forEach(([lx, lz]) => {
+        const leg = new THREE.Mesh(legGeo, woodMat);
+        leg.position.set(lx, legH / 2, lz);
+        g.add(leg);
+      });
+
+      // Cross-bracing
+      const crossGeo = new THREE.BoxGeometry(legDist * 2, 0.024, 0.024);
+      const cross1 = new THREE.Mesh(crossGeo, woodMat);
+      cross1.position.set(0, 0.22, 0);
+      g.add(cross1);
+
+      const cross2 = new THREE.Mesh(crossGeo, woodMat);
+      cross2.rotation.y = Math.PI / 2;
+      cross2.position.set(0, 0.22, 0);
+      g.add(cross2);
+
+      // 2. Matte Porcelain Planter Pot
       const pot = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.22, 0.17, 0.32, 14),
-        potMat
+        new THREE.CylinderGeometry(0.24, 0.20, 0.46, 24),
+        ceramicMat
       );
-      pot.position.y = 0.16;
+      pot.position.y = 0.44;
       g.add(pot);
 
-      // Soil disc on top
+      // Top rim ring
+      const rim = new THREE.Mesh(
+        new THREE.TorusGeometry(0.24, 0.014, 12, 24),
+        ceramicMat
+      );
+      rim.rotation.x = Math.PI / 2;
+      rim.position.y = 0.67;
+      g.add(rim);
+
+      // Potting soil
       const soil = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.21, 0.21, 0.04, 14),
+        new THREE.CylinderGeometry(0.23, 0.23, 0.03, 20),
         soilMat
       );
-      soil.position.y = 0.34;
+      soil.position.y = 0.65;
       g.add(soil);
 
-      // Main stem
-      const stem = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.025, 0.035, 1.4, 8),
-        stemMat
+      // 3. Trunk & Branches
+      const trunk1 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.026, 0.035, 0.55, 10),
+        trunkMat
       );
-      stem.position.y = 0.34 + 0.70;
-      g.add(stem);
+      trunk1.position.set(0, 0.90, 0);
+      g.add(trunk1);
 
-      // 3-5 large fan leaves fanning outward
-      const leafCount = 4 + (Math.abs(cx + cz) % 2 === 0 ? 1 : 0);
-      for (let i = 0; i < leafCount; i++) {
-        const angle = (i / leafCount) * Math.PI * 2 + Math.PI / 6;
-        const leaf = new THREE.Mesh(
-          new THREE.SphereGeometry(0.42, 6, 4),
-          leafMat
+      const branches = [
+        { dx: -0.12, dy: 1.35, dz: -0.08, rx: -0.35, rz: 0.45, len: 0.50 },
+        { dx:  0.14, dy: 1.40, dz: -0.05, rx: -0.20, rz: -0.50, len: 0.55 },
+        { dx: -0.05, dy: 1.50, dz:  0.15, rx:  0.50, rz: 0.20, len: 0.48 },
+        { dx:  0.02, dy: 1.65, dz: -0.02, rx:  0.10, rz: -0.15, len: 0.60 }
+      ];
+
+      branches.forEach(b => {
+        const stem = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.014, 0.022, b.len, 8),
+          stemMat
         );
-        leaf.scale.set(0.28, 0.08, 0.68);
-        leaf.position.set(
-          Math.sin(angle) * 0.52,
-          0.34 + 1.1 + (i % 2 === 0 ? 0.18 : 0),
-          Math.cos(angle) * 0.52
+        stem.position.set(b.dx * 0.6, b.dy - b.len * 0.35, b.dz * 0.6);
+        stem.rotation.set(b.rx * 0.7, 0, b.rz * 0.7);
+        g.add(stem);
+      });
+
+      // 4. Layered Realistic Foliage (14 sculpted leaves)
+      const leafConfigs = [
+        { x: -0.32, y: 1.25, z: -0.18, rx: 0.8, ry: -1.2, rz: -0.3, s: 0.85, dark: true },
+        { x:  0.34, y: 1.28, z: -0.12, rx: 0.7, ry:  1.4, rz:  0.4, s: 0.88, dark: true },
+        { x: -0.18, y: 1.35, z:  0.30, rx: -0.7, ry: 2.8, rz: -0.5, s: 0.82, dark: true },
+        { x:  0.22, y: 1.38, z:  0.28, rx: -0.6, ry: -2.5, rz:  0.4, s: 0.85, dark: true },
+        { x: -0.28, y: 1.55, z:  0.02, rx: 0.5, ry: -1.6, rz: -0.2, s: 0.95, dark: false },
+        { x:  0.30, y: 1.58, z:  0.08, rx: 0.4, ry:  1.1, rz:  0.3, s: 0.96, dark: false },
+        { x:  0.05, y: 1.62, z: -0.32, rx: 0.9, ry:  0.1, rz: -0.1, s: 0.90, dark: true },
+        { x: -0.06, y: 1.68, z:  0.32, rx: -0.8, ry: 3.1, rz:  0.2, s: 0.92, dark: false },
+        { x: -0.20, y: 1.82, z: -0.16, rx: 0.6, ry: -0.8, rz: -0.3, s: 0.88, dark: false },
+        { x:  0.18, y: 1.85, z: -0.18, rx: 0.5, ry:  0.7, rz:  0.2, s: 0.85, dark: false },
+        { x: -0.12, y: 1.92, z:  0.18, rx: -0.5, ry: 2.4, rz: -0.2, s: 0.82, dark: false },
+        { x:  0.14, y: 1.95, z:  0.16, rx: -0.4, ry: -2.2, rz:  0.3, s: 0.84, dark: false },
+        { x: -0.04, y: 2.12, z: -0.06, rx: 0.3, ry: -0.4, rz: -0.1, s: 0.72, dark: false },
+        { x:  0.05, y: 2.15, z:  0.04, rx: -0.3, ry:  1.8, rz:  0.2, s: 0.68, dark: false }
+      ];
+
+      leafConfigs.forEach(cfg => {
+        const leafMesh = new THREE.Mesh(
+          baseLeafGeo,
+          cfg.dark ? leafMatDark : leafMatLight
         );
-        leaf.rotation.y = -angle;
-        leaf.rotation.z = 0.35;
-        g.add(leaf);
-      }
-
-      // Smaller sub-leaves near top
-      for (let i = 0; i < 3; i++) {
-        const angle = (i / 3) * Math.PI * 2;
-        const leaf = new THREE.Mesh(
-          new THREE.SphereGeometry(0.28, 6, 4),
-          leafMat
-        );
-        leaf.scale.set(0.24, 0.07, 0.5);
-        leaf.position.set(
-          Math.sin(angle) * 0.3,
-          0.34 + 1.5,
-          Math.cos(angle) * 0.3
-        );
-        leaf.rotation.y = -angle;
-        leaf.rotation.z = 0.2;
-        g.add(leaf);
-      }
-
-      room.add(g);
-    }
-  }
-
-  _addSpotLamps(room, W, D) {
-    // Wall-mounted spotlights near artworks: one on each non-door wall,
-    // positioned high on the wall pointing downward at painting height.
-    const wallInset = 0.3;
-    const lampY = 7.5;
-    const lampPositions = [
-      { x:  W / 4,  z: -D / 2 + wallInset, ry: 0 },
-      { x: -W / 4,  z: -D / 2 + wallInset, ry: 0 },
-      { x: -W / 2 + wallInset, z:  D / 4,  ry: Math.PI / 2 },
-      { x:  W / 2 - wallInset, z:  D / 4,  ry: -Math.PI / 2 },
-    ];
-
-    const bracketMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-    const shadeMat   = new THREE.MeshLambertMaterial({ color: 0xfff8e8, emissive: 0xffe5a0, emissiveIntensity: 1.2, side: THREE.BackSide });
-
-    for (const { x, z, ry } of lampPositions) {
-      const g = new THREE.Group();
-      g.position.set(x, lampY, z);
-      g.rotation.y = ry;
-
-      // Arm bracket extending from wall
-      const arm = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.025, 0.025, 0.55, 6),
-        bracketMat
-      );
-      arm.rotation.z = Math.PI / 2;
-      arm.position.set(0.28, 0, 0);
-      g.add(arm);
-
-      // Lamp head (cone shade pointing downward-forward)
-      const shade = new THREE.Mesh(
-        new THREE.ConeGeometry(0.22, 0.4, 16, 1, true),
-        shadeMat
-      );
-      shade.position.set(0.56, -0.28, 0);
-      shade.rotation.z = -1.1;
-      g.add(shade);
-
-      // Spot light
-      const spot = new THREE.SpotLight(0xfff5cc, 18, 12, Math.PI / 7, 0.4, 1.8);
-      spot.position.set(0.56, -0.28, 0);
-      spot.target.position.set(0.56, -6, 0);
-      g.add(spot);
-      g.add(spot.target);
+        leafMesh.position.set(cfg.x, cfg.y, cfg.z);
+        leafMesh.rotation.set(cfg.rx, cfg.ry, cfg.rz);
+        leafMesh.scale.set(cfg.s, cfg.s, cfg.s);
+        g.add(leafMesh);
+      });
 
       room.add(g);
     }
   }
 
   _addWayfinderTotem(room, className) {
-    // Central 4-sided obelisk-ish totem pole with class name on all 4 faces
-
-    const baseMat  = new THREE.MeshLambertMaterial({ color: 0x2a2724 });
-    const poleMatL = new THREE.MeshLambertMaterial({ color: 0xf0ede8 });
-    const poleMatD = new THREE.MeshLambertMaterial({ color: 0xe0ddd8 });
-
     const g = new THREE.Group();
-    // Offset slightly from dead center so player can pass
     g.position.set(0, 0, 0);
 
-    // Square base plinth
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.18, 0.6), baseMat);
-    base.position.y = 0.09;
+    const totemW = 0.64;
+    const totemH = 2.18;
+    const totemD = 0.12;
+
+    // 1. Recessed dark floor reveal / shadow-gap base
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x0f0f12, roughness: 0.5 });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.05, 0.08), baseMat);
+    base.position.y = 0.025;
     g.add(base);
 
-    // Middle plinth step
-    const step = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.5), poleMatD);
-    step.position.y = 0.24;
-    g.add(step);
+    // 2. Minimalist Monolith Body: Deep matte charcoal basalt
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: 0x18181b,
+      roughness: 0.32,
+      metalness: 0.15
+    });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(totemW, totemH, totemD), bodyMat);
+    body.position.y = 0.05 + totemH / 2;
+    g.add(body);
 
-    // Main column
-    const column = new THREE.Mesh(new THREE.BoxGeometry(0.36, 2.0, 0.36), poleMatL);
-    column.position.y = 0.3 + 1.0;
-    g.add(column);
-
-    // Tapered top cap
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.22, 0.42, 4), baseMat);
-    cap.rotation.y = Math.PI / 4;
-    cap.position.y = 0.3 + 2.0 + 0.21;
+    // 3. Top brushed titanium metal cap
+    const capMat = new THREE.MeshStandardMaterial({
+      color: 0x27272a,
+      roughness: 0.2,
+      metalness: 0.6
+    });
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(totemW + 0.006, 0.015, totemD + 0.006), capMat);
+    cap.position.y = 0.05 + totemH + 0.0075;
     g.add(cap);
 
-    // Canvas signage texture applied to all 4 faces
+    // 4. Front & Back Wayfinding Panels (EXACT Aspect Ratio: 0.56 / 1.84 matches 560x1840 canvas)
+    const panelW = 0.56;
+    const panelH = 1.84;
     const tex = new THREE.CanvasTexture(makeWayfinderCanvas(className));
     tex.colorSpace = THREE.SRGBColorSpace;
 
-    const faceGeo = new THREE.PlaneGeometry(0.32, 1.84);
-    const faceMat = new THREE.MeshBasicMaterial({ map: tex, transparent: false });
-    const faceZ   = 0.182; // just past column face
+    const faceGeo = new THREE.PlaneGeometry(panelW, panelH);
+    const faceMat = new THREE.MeshBasicMaterial({ map: tex });
 
-    // 4 faces
-    [[0, 0, faceZ, 0], [faceZ, 0, 0, Math.PI / 2],
-     [0, 0, -faceZ, Math.PI], [-faceZ, 0, 0, -Math.PI / 2]].forEach(([fx, fy, fz, ry]) => {
-      const face = new THREE.Mesh(faceGeo, faceMat);
-      face.position.set(fx, 0.3 + 1.0, fz);
-      face.rotation.y = ry;
-      g.add(face);
-    });
+    const faceZ = totemD / 2 + 0.002;
 
-    // Subtle ambient glow at base
-    const totemLight = new THREE.PointLight(0xfff8ee, 6, 7, 2.0);
-    totemLight.position.set(0, 1.5, 0);
+    // Front face (facing South / entry)
+    const frontFace = new THREE.Mesh(faceGeo, faceMat);
+    frontFace.position.set(0, 0.05 + totemH / 2, faceZ);
+    g.add(frontFace);
+
+    // Back face (facing North / exit)
+    const backFace = new THREE.Mesh(faceGeo, faceMat);
+    backFace.position.set(0, 0.05 + totemH / 2, -faceZ);
+    backFace.rotation.y = Math.PI;
+    g.add(backFace);
+
+    // Subtle warm ambient floor glow at base
+    const totemLight = new THREE.PointLight(0xfff5ea, 5, 5, 2.0);
+    totemLight.position.set(0, 1.4, 0);
     g.add(totemLight);
 
     room.add(g);
@@ -1035,6 +1156,46 @@ export class ArchitecturalGallery {
     const plaqueMesh = new THREE.Mesh(plaqueGeometry, new THREE.MeshBasicMaterial({ map: plaqueCache.get(plaqueKey) }));
     artGroup.add(plaqueMesh);
 
+    // Gallery Picture Lamp Fixture mounted directly on top of the artwork
+    const lampGroup = new THREE.Group();
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0x1f1f23, roughness: 0.35, metalness: 0.8 });
+    const lampGlowMat = new THREE.MeshBasicMaterial({ color: 0xfffae8 });
+
+    // Wall mounting plate
+    const lampBase = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.035), lampMat);
+    lampGroup.add(lampBase);
+
+    // Twin curved support arms extending out over the frame
+    const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.36, 8), lampMat);
+    armL.rotation.x = Math.PI / 2;
+    armL.position.set(-0.16, -0.02, 0.18);
+    lampGroup.add(armL);
+
+    const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.36, 8), lampMat);
+    armR.rotation.x = Math.PI / 2;
+    armR.position.set(0.16, -0.02, 0.18);
+    lampGroup.add(armR);
+
+    // Horizontal lamp bar & warm emissive light strip (geometry sized in updateFrameDimensions)
+    const lampBarMesh = new THREE.Mesh(new THREE.BufferGeometry(), lampMat);
+    lampBarMesh.rotation.z = Math.PI / 2;
+    lampBarMesh.position.set(0, -0.035, 0.36);
+    lampGroup.add(lampBarMesh);
+
+    const lampGlow = new THREE.Mesh(new THREE.BufferGeometry(), lampGlowMat);
+    lampGlow.rotation.x = Math.PI / 2;
+    lampGlow.position.set(0, -0.052, 0.36);
+    lampGroup.add(lampGlow);
+
+    // Downward spotlight focused directly on the artwork canvas
+    const artSpot = new THREE.SpotLight(0xfff3db, 6.0, 4.5, Math.PI / 3.2, 0.5, 1.2);
+    artSpot.position.set(0, -0.055, 0.36);
+    artSpot.target.position.set(0, -1.0, 0.05);
+    lampGroup.add(artSpot);
+    lampGroup.add(artSpot.target);
+
+    artGroup.add(lampGroup);
+
     const updateFrameDimensions = (aspectRatio) => {
       let w = maxInnerW;
       let h = w / aspectRatio;
@@ -1054,6 +1215,19 @@ export class ArchitecturalGallery {
       canvasMesh.position.z = frameD / 2 + 0.005;
 
       plaqueMesh.position.set(frameW / 2 + PLAQUE_W / 2 + 0.08, -frameH / 2 + PLAQUE_H / 2 + 0.05, 0.02);
+
+      // Position lamp directly on top of the frame
+      const lampY = frameH / 2 + 0.20;
+      lampGroup.position.set(0, lampY, 0);
+
+      const barLen = Math.min(1.4, Math.max(0.65, frameW * 0.62));
+      if (lampBarMesh.geometry) lampBarMesh.geometry.dispose();
+      lampBarMesh.geometry = new THREE.CylinderGeometry(0.02, 0.02, barLen, 12);
+
+      if (lampGlow.geometry) lampGlow.geometry.dispose();
+      lampGlow.geometry = new THREE.PlaneGeometry(barLen * 0.88, 0.02);
+
+      artSpot.target.position.set(0, -frameH * 0.4, 0.05);
     };
 
     if (art.thumbnail) {
@@ -1114,6 +1288,32 @@ export class ArchitecturalGallery {
     const plaque = new THREE.Mesh(plaqueGeometry, new THREE.MeshBasicMaterial({ map: plaqueCache.get(key) }));
     plaque.position.set(0, 0.65, 0.61);
     pedestalGroup.add(plaque);
+
+    // Gallery overhead spotlight mounted directly above the 3D sculpture pedestal
+    const spotFixture = new THREE.Group();
+    spotFixture.position.set(0, 3.8, 0);
+
+    const fixtureMount = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.08, 0.14, 12),
+      new THREE.MeshStandardMaterial({ color: 0x1f1f23, roughness: 0.35, metalness: 0.8 })
+    );
+    spotFixture.add(fixtureMount);
+
+    const fixtureGlow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.065, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfffae8 })
+    );
+    fixtureGlow.rotation.x = Math.PI / 2;
+    fixtureGlow.position.y = -0.071;
+    spotFixture.add(fixtureGlow);
+
+    const pedestalSpot = new THREE.SpotLight(0xfff3db, 6.5, 4.8, Math.PI / 3.4, 0.45, 1.2);
+    pedestalSpot.position.set(0, -0.075, 0);
+    pedestalSpot.target.position.set(0, -2.5, 0);
+    spotFixture.add(pedestalSpot);
+    spotFixture.add(pedestalSpot.target);
+
+    pedestalGroup.add(spotFixture);
 
     modelQueue.push({ group: pedestalGroup, art });
     group.add(pedestalGroup);
