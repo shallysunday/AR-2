@@ -30,6 +30,11 @@ window.ARCHIVE_CONFIG = {
       'AT201': 'Dosen G',
       'AT202': 'Dosen H',
       'AT203': 'Dosen I'
+    },
+    'Advertising Photography': {
+      'AP201': 'Dosen J',
+      'AP202': 'Dosen K',
+      'AP203': 'Dosen L'
     }
   }
 };

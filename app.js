@@ -265,8 +265,7 @@
       classCode: 'AT201',
       period: 'Odd 2026/2027',
       is2D: false,
-      // modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Avocado/glTF-Binary/Avocado.glb',
-      modelUrl: '3d/3d.glb',
+      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Avocado/glTF-Binary/Avocado.glb',
       thumbnail: '',
       sample: true
     },
@@ -308,7 +307,7 @@
       classCode: 'AT201',
       period: 'Odd 2026/2027',
       is2D: false,
-      modelUrl: '3d/3d.glb',
+      modelUrl: '3d/Test2.glb',
       thumbnail: '',
       sample: true
     }
@@ -719,6 +718,11 @@
         'AT201': 'Dosen G',
         'AT202': 'Dosen H',
         'AT203': 'Dosen I'
+      },
+      'Advertising Photography': {
+        'AP201': 'Dosen J',
+        'AP202': 'Dosen K',
+        'AP203': 'Dosen L'
       }
     };
 
