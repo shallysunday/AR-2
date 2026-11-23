@@ -14,7 +14,15 @@ const CLASS_PASTEL_COLORS = {
   'IL101': '#F8C8DC',
   'PH101': '#B5EAD7',
   'AP201': '#FFE5B4',
-  'AT201': '#DCD6F7'
+  'AT201': '#DCD6F7',
+  'Illustration': '#F8C8DC',
+  'Ilustrasi Desain': '#F8C8DC',
+  'Photography': '#B5EAD7',
+  'Fotografi': '#B5EAD7',
+  'Fotografi Iklan': '#B5EAD7',
+  'Advertising Photography': '#FFE5B4',
+  'Applied Typography': '#DCD6F7',
+  'Tipografi Aplikatif': '#DCD6F7'
 };
 
 function makeSignCanvas(className, isExit = true) {
@@ -213,9 +221,9 @@ const FALLBACK_PASTELS = [
   '#C7CEEA'  // pastel periwinkle
 ];
 
-function getPastelColor(classCode, index = 0) {
-  if (classCode && CLASS_PASTEL_COLORS[classCode]) {
-    return CLASS_PASTEL_COLORS[classCode];
+function getPastelColor(classKey, index = 0) {
+  if (classKey && CLASS_PASTEL_COLORS[classKey]) {
+    return CLASS_PASTEL_COLORS[classKey];
   }
   return FALLBACK_PASTELS[Math.abs(index) % FALLBACK_PASTELS.length];
 }
@@ -571,15 +579,16 @@ export class ArchitecturalGallery {
       floor.rotation.x = -Math.PI / 2;
       room.add(floor);
 
-      const pastelHex = CLASS_PASTEL_COLORS[cls.code] || '#B5EAD7';
-      if (!wallMaterials.has(cls.code)) {
-        wallMaterials.set(cls.code, new THREE.MeshLambertMaterial({
+      const pastelHex = CLASS_PASTEL_COLORS[cls.name] || CLASS_PASTEL_COLORS[cls.code] || getPastelColor(cls.name, entry.ci);
+      const wallKey = cls.name || cls.code;
+      if (!wallMaterials.has(wallKey)) {
+        wallMaterials.set(wallKey, new THREE.MeshLambertMaterial({
           map: makeWallGradientTexture(pastelHex),
           transparent: true,
           side: THREE.DoubleSide
         }));
       }
-      const wallMat = wallMaterials.get(cls.code);
+      const wallMat = wallMaterials.get(wallKey);
 
       this.buildWalls(room, entry, H, wallMat);
       this.createFloatingLighting(room, entry.W, entry.D);
@@ -985,8 +994,8 @@ export class ArchitecturalGallery {
       const fromClass = this.classes[fromCi];
       const toClass = this.classes[toCi];
 
-      const colorA = getPastelColor(fromClass?.code, fromCi);
-      const colorB = getPastelColor(toClass?.code, toCi);
+      const colorA = getPastelColor(fromClass?.name || fromClass?.code, fromCi);
+      const colorB = getPastelColor(toClass?.name || toClass?.code, toCi);
 
       const tunnelMat = new THREE.MeshLambertMaterial({
         map: makeTunnelGradientTexture(colorA, colorB),

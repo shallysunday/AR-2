@@ -360,11 +360,14 @@ export function artSlots(e, itemsList) {
 export function groupByClass(items) {
   const map = new Map();
   for (const it of items) {
-    const code = (it.classCode || 'UNSORTED').toUpperCase();
-    if (!map.has(code)) map.set(code, { code, name: it.className || code, items: [] });
-    map.get(code).items.push(it);
+    const name = (it.className || it.classCode || 'General').trim();
+    const code = (it.classCode || name).toUpperCase();
+    if (!map.has(name)) {
+      map.set(name, { code, name, items: [] });
+    }
+    map.get(name).items.push(it);
   }
-  const list = [...map.values()].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+  const list = [...map.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   list.forEach(c => c.items.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)));
   return list;
 }

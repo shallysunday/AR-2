@@ -391,14 +391,14 @@
             galleryInstance.classes.forEach((cls, idx) => {
               const opt = document.createElement('option');
               opt.value = idx;
-              opt.textContent = `${cls.code} — ${cls.name}`;
+              opt.textContent = cls.name;
               jumpSelect.appendChild(opt);
 
               if (warpContainer) {
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'warp-btn';
-                btn.innerHTML = `<span class="warp-code">${cls.code}</span>`;
+                btn.textContent = cls.name;
                 btn.title = `Warp to ${cls.name}`;
                 btn.addEventListener('click', () => {
                   galleryInstance.jumpToClass(idx);
