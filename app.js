@@ -307,7 +307,7 @@
       classCode: 'AT201',
       period: 'Odd 2026/2027',
       is2D: false,
-      modelUrl: '3d/Test2.glb',
+      modelUrl: '3d/Test3.glb',
       thumbnail: '',
       sample: true
     },
