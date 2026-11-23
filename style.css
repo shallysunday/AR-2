@@ -215,14 +215,17 @@ a { color: inherit; text-decoration: none; }
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  /* background: linear-gradient(135deg, #89E051, #42E3C6); */
-  background: 'images/pfpDefault.jpg';
-  color: #111;
-  font-size: 22px;
-  font-weight: 800;
-  display: grid;
-  place-items: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #242424;
   box-shadow: 0 4px 14px rgba(137, 224, 81, 0.3);
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .profile-name { margin: 0; font-size: 24px; font-weight: 800; }
@@ -262,13 +265,49 @@ a { color: inherit; text-decoration: none; }
 
 /* About Modal Panel */
 .about-panel {
-  max-width: 500px !important;
-  border-radius: 24px !important;
+  display: block !important;
+  max-width: 680px !important;
+  border-radius: 28px !important;
   background: #1a1a1a !important;
-  padding: 32px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 48px 44px !important;
+  overflow: hidden;
 }
-.about-card h2 { font-size: 24px; margin-top: 0; }
-.about-card p { color: var(--ink-soft); line-height: 1.6; }
+
+/* Film grain overlay */
+.about-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.08;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  z-index: 1;
+}
+
+.about-card {
+  position: relative;
+  z-index: 2;
+}
+
+.about-logo {
+  height: 56px;
+  width: auto;
+  margin-bottom: 24px;
+  object-fit: contain;
+}
+
+.about-card h2 {
+  font-size: 28px;
+  margin: 0 0 14px;
+}
+
+.about-card p {
+  font-size: 16px;
+  color: var(--ink-soft);
+  line-height: 1.65;
+  margin: 0 0 14px;
+}
 
 /* ---------- Controls ---------- */
 .controls {
