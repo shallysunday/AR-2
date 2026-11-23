@@ -101,7 +101,7 @@ function make2DArtworkCanvas(item) {
   ctx.stroke();
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 30px Georgia, serif';
+  ctx.font = 'bold 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(clamp(ctx, item.title || 'Untitled', W - 60), W / 2, H * 0.42);
 
@@ -134,7 +134,7 @@ function makePlaqueCanvas(item) {
   ctx.fillText((item.classCode || '').toUpperCase(), 18, 30);
 
   ctx.fillStyle = '#1b1b1a';
-  ctx.font = 'bold 24px Georgia, serif';
+  ctx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   ctx.fillText(clamp(ctx, item.title || 'Untitled', W - 36), 18, 62);
 
   ctx.font = 'bold 15px -apple-system, sans-serif';
