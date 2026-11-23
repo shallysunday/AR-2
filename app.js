@@ -310,6 +310,20 @@
       modelUrl: '3d/Test2.glb',
       thumbnail: '',
       sample: true
+    },
+    {
+      id: 'sample-at-7',
+      title: 'Test 002',
+      description: 'Testing file',
+      student: 'Ganjar',
+      lecturer: 'Maya Anggraini, M.Ds.',
+      className: 'Applied Typography',
+      classCode: 'AT201',
+      period: 'Odd 2026/2027',
+      is2D: false,
+      modelUrl: '3d/Test3.glb',
+      thumbnail: '',
+      sample: true
     }
   ].map((item, i) => ({ ...item, createdAt: Date.now() - (i + 1) * 86400000 }));
 
