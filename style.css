@@ -84,6 +84,17 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.05em;
   font-size: 17px;
 }
+.brand-logo {
+  height: 32px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.brand:hover .brand-logo {
+  transform: scale(1.03);
+  opacity: 0.92;
+}
 .brand-mark {
   font-size: 22px;
   color: var(--highlight);
