@@ -215,7 +215,7 @@
       id: 'sample-ap-1',
       title: 'Samba Karambie',
       description: 'Makanan Khas Lima Puluh Kota. \nAnggota:\n1. Suci Dwi Novita 24027050\n2. Muhammad Zacky 24027186\n3. Rahmi Ikhsani Disti 24027042',
-      student: 'Kelompok 1',
+      student: 'Kelompok 1 ',
       lecturer: 'Fauzan Aulia S.Ds., M.Sn.',
       className: 'Advertising Photography',
       classCode: 'Wed, 13.20',
