@@ -27,12 +27,12 @@
     // --- Illustration (2D Framed Wall Artworks) ---
     {
       id: 'sample-il-1',
-      title: 'Hemat Energi',
-      description: 'Selamatkan bumi!',
-      student: 'M. Daffa Ardhana',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
+      title: 'Wardah',
+      description: 'Beauty in Every Shade.\nOleh:\nNaufal Septian\n24027031',
+      student: 'Naufal Septian',
+      lecturer: 'Aditya Hanum Widarsa S.Ds., M.Sn.',
       className: 'Illustration',
-      classCode: 'IL101',
+      classCode: 'Wed, 09.41',
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#e07a5f',
@@ -41,12 +41,12 @@
     },
     {
       id: 'sample-il-2',
-      title: 'Penyu',
-      description: 'Upaya pelestarian penyu di Indonesia.',
-      student: 'Farah Dina Aulia',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
+      title: 'Harlette',
+      description: 'All skin type, for everyone.\nOleh:\nNatasya\n24027094',
+      student: 'Natasya',
+      lecturer: 'Aditya Hanum Widarsa S.Ds., M.Sn.',
       className: 'Illustration',
-      classCode: 'IL101',
+      classCode: 'Wed, 09.41',
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#81b29a',
@@ -55,12 +55,12 @@
     },
     {
       id: 'sample-il-3',
-      title: 'Wardah',
-      description: 'Beauty in Every Shade.',
-      student: 'Nopal',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
+      title: 'Penyu',
+      description: 'Upaya pelestarian penyu di Indonesia.\nOleh:\nFarah Dina Aulia\n23027019',
+      student: 'Farah Dina Aulia',
+      lecturer: 'Riri Trinanda S.Pd., M.Sn.',
       className: 'Illustration',
-      classCode: 'IL101',
+      classCode: 'Thu, 07.51',
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#3d405b',
@@ -69,12 +69,12 @@
     },
     {
       id: 'sample-il-4',
-      title: 'Harlette',
-      description: 'All skin type, for everyone.',
-      student: 'Natasya',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
+      title: 'Hemat Energi',
+      description: 'Selamatkan bumi!\nOleh:\nDaffa Ardhana\n23027027',
+      student: 'Daffa Ardhana',
+      lecturer: 'Riri Trinanda S.Pd., M.Sn.',
       className: 'Illustration',
-      classCode: 'IL101',
+      classCode: 'Thu, 07.51',
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#f2cc8f',
@@ -84,11 +84,11 @@
     {
       id: 'sample-il-5',
       title: 'Wounded Shadow',
-      description: 'Graphic story pacing and panel composition exploring urban myth.',
+      description: 'Graphic story pacing and panel composition exploring urban myth.\nOleh:\nDiva Nurul Hasanah\n24027034',
       student: 'Diva Nurul Hasanah',
-      lecturer: 'Ary Ramadhan, S.Pd., M.Pd.T.',
+      lecturer: 'Riri Trinanda S.Pd., M.Sn.',
       className: 'Illustration',
-      classCode: 'IL101',
+      classCode: 'Thu, 07.51',
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#f2cc8f',
@@ -99,229 +99,257 @@
     // --- Photography (2D Framed Wall Artworks) ---
     {
       id: 'sample-ph-1',
-      title: 'In Motion',
-      description: 'Cool car in motion.',
-      student: 'Fajar Nugroho',
-      lecturer: 'Siti Rahma, M.Sn.',
+      title: 'Photography Assigment',
+      description: 'Oleh:\nHana Riandra\n24027080',
+      student: 'Hana Riandra',
+      lecturer: 'Fauzan Aulia S.Ds., M.Sn.',
       className: 'Photography',
-      classCode: 'PH101',
-      period: 'Odd 2026/2027',
+      classCode: 'Wed, 13.20',
+      period: 'Odd 2025/2026',
       is2D: true,
       artColor: '#c32222',
-      thumbnail: 'images/PH1.webp',
+      thumbnail: 'images/F_1.jpg',
       sample: true
     },
     {
       id: 'sample-ph-2',
-      title: 'Urban Twilight Light',
-      description: 'Long-exposure urban photography capturing artificial light tracks.',
-      student: 'Nabila Zahra',
-      lecturer: 'Siti Rahma, M.Sn.',
+      title: 'Photography Assigment',
+      description: 'Oleh:\nMuhammad Rhaziq\n2402708',
+      student: 'Muhammad Rhaziq',
+      lecturer: 'Fauzan Aulia S.Ds., M.Sn.',
       className: 'Photography',
-      classCode: 'PH101',
-      period: 'Odd 2026/2027',
+      classCode: 'Wed, 13.20',
+      period: 'Odd 2025/2026',
       is2D: true,
       artColor: '#8d99ae',
-      thumbnail: 'images/PH2.webp',
+      thumbnail: 'images/F_2.jpg',
       sample: true
     },
     {
-      id: 'sample-ph-3',
-      title: 'Street Documentary Series',
-      description: 'Candid portraiture capture of daily life in historic city alleyways.',
-      student: 'Kevin Hartono',
-      lecturer: 'Siti Rahma, M.Sn.',
+      id: 'sample-ph-3a',
+      title: 'Photography Assigment',
+      description: 'Oleh:\nAdel Badilah Pratiwi\n24027155',
+      student: 'Adel Badilah Pratiwi',
+      lecturer: 'Rifqy Aulia Zaim, S.Pd., M.Pd.T.',
       className: 'Photography',
-      classCode: 'PH101',
-      period: 'Odd 2026/2027',
+      classCode: 'Mon, 07.51',
+      period: 'Odd 2025/2026',
       is2D: true,
       artColor: '#4a4e69',
-      thumbnail: 'images/PH3.webp',
+      thumbnail: 'images/F_3a.jpg',
+      sample: true
+    },
+    {
+      id: 'sample-ph-3b',
+      title: 'Photography Assigment',
+      description: 'Oleh:\nAdel Badilah Pratiwi\n24027155',
+      student: 'Adel Badilah Pratiwi',
+      lecturer: 'Rifqy Aulia Zaim, S.Pd., M.Pd.T.',
+      className: 'Photography',
+      classCode: 'Mon, 07.51',
+      period: 'Odd 2025/2026',
+      is2D: true,
+      artColor: '#4a4e69',
+      thumbnail: 'images/F_3b.jpg',
       sample: true
     },
     {
       id: 'sample-ph-4',
-      title: 'Minimalist Portraiture',
-      description: 'Studio lighting exploration emphasizing facial contour and tone.',
-      student: 'Laras Ayu',
-      lecturer: 'Siti Rahma, M.Sn.',
+      title: 'Photography Assigment',
+      description: 'Oleh:\nSawwalina Fitri\n24027197',
+      student: 'Sawwalina Fitri',
+      lecturer: 'Rifqy Aulia Zaim, S.Pd., M.Pd.T.',
       className: 'Photography',
-      classCode: 'PH101',
-      period: 'Odd 2026/2027',
+      classCode: 'Mon, 07.51',
+      period: 'Odd 2025/2026',
       is2D: true,
       artColor: '#6c5ce7',
-      thumbnail: 'images/PH4.webp',
+      thumbnail: 'images/F_4.jpg',
       sample: true
     },
     {
-      id: 'sample-ph-5',
-      title: 'Broken Reflection',
-      description: 'Reflection of broken tower.',
-      student: 'Laras Ayu',
-      lecturer: 'Siti Rahma, M.Sn.',
+      id: 'sample-ph-5a',
+      title: 'Photography Assigment',
+      description: 'Oleh:\nShabrina Qolby\n24027198',
+      student: 'Shabrina Qolby',
+      lecturer: 'Rifqy Aulia Zaim, S.Pd., M.Pd.T.',
       className: 'Photography',
-      classCode: 'PH101',
-      period: 'Odd 2026/2027',
+      classCode: 'Mon, 07.51',
+      period: 'Odd 2025/2026',
       is2D: true,
-      artColor: '#6c5ce7',
-      thumbnail: 'images/PH5.webp',
+      artColor: '#e75c5c',
+      thumbnail: 'images/F_5a.jpeg',
+      sample: true
+    },
+    {
+      id: 'sample-ph-5b',
+      title: 'Photography Assigment',
+      description: 'Oleh:\nShabrina Qolby\n24027198',
+      student: 'Shabrina Qolby',
+      lecturer: 'Rifqy Aulia Zaim, S.Pd., M.Pd.T.',
+      className: 'Photography',
+      classCode: 'Mon, 07.51',
+      period: 'Odd 2025/2026',
+      is2D: true,
+      artColor: '#5cbde7',
+      thumbnail: 'images/F_5b.jpeg',
+      sample: true
+    },
+    {
+      id: 'sample-ph-5c',
+      title: 'Photography Assigment',
+      description: 'Oleh:\nShabrina Qolby\n24027198',
+      student: 'Shabrina Qolby',
+      lecturer: 'Rifqy Aulia Zaim, S.Pd., M.Pd.T.',
+      className: 'Photography',
+      classCode: 'Mon, 07.51',
+      period: 'Odd 2025/2026',
+      is2D: true,
+      artColor: '#e7755c',
+      thumbnail: 'images/F_5c.jpeg',
       sample: true
     },
 
     // --- Advertising Photography (2D Framed Wall Artworks) ---
     {
       id: 'sample-ap-1',
-      title: 'Commercial Beverage Splash',
-      description: 'High-speed action photo staging for commercial beverage ad.',
-      student: 'Bayu Aditya',
-      lecturer: 'Doni Prasetyo, M.Ds.',
+      title: 'Samba Karambie',
+      description: 'Makanan Khas Lima Puluh Kota. \nAnggota:\n1. Suci Dwi Novita 24027050\n2. Muhammad Zacky 24027186\n3. Rahmi Ikhsani Disti 24027042',
+      student: 'Kelompok 1',
+      lecturer: 'Fauzan Aulia S.Ds., M.Sn.',
       className: 'Advertising Photography',
-      classCode: 'AP201',
+      classCode: 'Wed, 13.20',
       period: 'Odd 2026/2027',
       is2D: true,
-      artColor: '#f4a261',
-      thumbnail: 'images/AP1.webp',
+      artColor: '#a8c25b',
+      thumbnail: 'images/FI_A.png',
       sample: true
     },
     {
       id: 'sample-ap-2',
-      title: 'Cosmetics Staging & Reflection',
-      description: 'Luxury perfume product lighting with mirror reflection and soft gradients.',
-      student: 'Citra Dewi',
-      lecturer: 'Doni Prasetyo, M.Ds.',
+      title: 'Karak Kaliang',
+      description: 'Makanan Khas Payakumbuh.\nAnggota:\n1. Hanna Riandra 24027018\n2. Rozan Rizandi 24027047',
+      student: 'Kelompok 2',
+      lecturer: 'Fauzan Aulia S.Ds., M.Sn.',
       className: 'Advertising Photography',
-      classCode: 'AP201',
+      classCode: 'Wed, 13.20',
       period: 'Odd 2026/2027',
       is2D: true,
-      artColor: '#e76f51',
-      thumbnail: 'images/AP2.webp',
+      artColor: '#c8753e',
+      thumbnail: 'images/FI_B.png',
       sample: true
     },
     {
       id: 'sample-ap-3',
-      title: 'Retro Apparel Campaign',
-      description: 'Commercial fashion lookbook staging with vintage studio props.',
-      student: 'Nadia Rahma',
-      lecturer: 'Doni Prasetyo, M.Ds.',
+      title: 'Rakik Pensi',
+      description: 'Makanan Khas Maninjau. \n1. Andini Siregar 24027065\n2. Nafisah Putri 24027029\n3. Verona Del Qurama 24027108',
+      student: 'Kelompok 3',
+      lecturer: 'Fauzan Aulia S.Ds., M.Sn.',
       className: 'Advertising Photography',
-      classCode: 'AP201',
+      classCode: 'Wed, 13.20',
       period: 'Odd 2026/2027',
       is2D: true,
-      artColor: '#2a9d8f',
-      thumbnail: 'images/AP3.webp',
+      artColor: '#f7eeaf',
+      thumbnail: 'images/FI_C.png',
       sample: true
     },
     {
       id: 'sample-ap-4',
-      title: 'Macro Product Lighting',
-      description: 'Precision studio macro lighting for luxury watch campaign.',
-      student: 'Bagas Firmansyah',
-      lecturer: 'Doni Prasetyo, M.Ds.',
+      title: 'Ladu Arai',
+      description: 'Makanan Khas Pariaman. \nAnggota :\n1. Dindatul Afizah 24027013\n2. Syifwa Hafifa Salsabila 24027137\n3. Aqilah Qurrata Ayuni 24027066',
+      student: 'Kelompok 4',
+      lecturer: 'Fauzan Aulia S.Ds., M.Sn.',
       className: 'Advertising Photography',
-      classCode: 'AP201',
+      classCode: 'Wed, 13.20',
+      period: 'Odd 2026/2027',
+      is2D: true,
+      artColor: '#a4bd98',
+      thumbnail: 'images/FI_D.jpeg',
+      sample: true
+    },
+    {
+      id: 'sample-ap-5',
+      title: 'Kue Talam',
+      description: 'Makanan Khas Batu Sangkar. \nAnggota:\n 1. Muhammad Iqbal 24027035\n2. Muhammad Rhaziq 24027087\n 3. Willyam Zukhri Vanora 24027110',
+      student: 'Kelompok 5',
+      lecturer: 'Fauzan Aulia S.Ds., M.Sn.',
+      className: 'Advertising Photography',
+      classCode: 'Wed, 13.20',
       period: 'Odd 2026/2027',
       is2D: true,
       artColor: '#264653',
-      thumbnail: 'images/AP4.webp',
+      thumbnail: 'images/FI_E.png',
       sample: true
     },
 
     // --- Applied Typography (3D Pedestal GLB Models) ---
     {
       id: 'sample-at-1',
-      title: 'Packaging Label Study',
-      description: 'A 3D packaging and typography label study on a water bottle object.',
-      student: 'Nabila Zahra',
-      lecturer: 'Maya Anggraini, M.Ds.',
+      title: 'B for Burung',
+      description: 'Oleh:\nAbdillah\n24027001',
+      student: 'Abdillah',
+      lecturer: 'Hendra afriwan, S.Sn, M.Sn',
       className: 'Applied Typography',
-      classCode: 'AT201',
-      period: 'Odd 2026/2027',
+      classCode: 'Tue, 13.20',
+      period: 'Odd 2025/2026',
       is2D: false,
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/WaterBottle/glTF-Binary/WaterBottle.glb',
+      modelUrl: '3d/TA_1.glb',
       thumbnail: '',
       sample: true
     },
     {
       id: 'sample-at-2',
-      title: 'Sound Object Lettering',
-      description: 'Lettering and surface graphics on a retro audio boombox model.',
-      student: 'Kevin Hartono',
-      lecturer: 'Maya Anggraini, M.Ds.',
+      title: 'D for Delima',
+      description: 'Oleh:\nNajla Azizah\n24027030',
+      student: 'Najla Azizah',
+      lecturer: 'Arif Budiman, M.Kom',
       className: 'Applied Typography',
-      classCode: 'AT201',
-      period: 'Odd 2026/2027',
+      classCode: 'Mon, 07.51',
+      period: 'Odd 2025/2026',
       is2D: false,
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/BoomBox/glTF-Binary/BoomBox.glb',
+      modelUrl: '3d/TA_2.glb',
       thumbnail: '',
       sample: true
     },
     {
       id: 'sample-at-3',
-      title: 'Spatial Letterform Form',
-      description: 'Visual communication and volumetric type on organic fruit form.',
-      student: 'Laras Ayu',
-      lecturer: 'Maya Anggraini, M.Ds.',
+      title: 'K for Kawah',
+      description: 'Oleh:\nRahmi Ikhsani Disti\n24027042',
+      student: 'Rahmi Ikhsani Disti',
+      lecturer: 'Hendra afriwan, S.Sn, M.Sn',
       className: 'Applied Typography',
-      classCode: 'AT201',
-      period: 'Odd 2026/2027',
+      classCode: 'Tue, 13.20',
+      period: 'Odd 2025/2026',
       is2D: false,
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Avocado/glTF-Binary/Avocado.glb',
+      modelUrl: '3d/TA_3.glb',
       thumbnail: '',
       sample: true
     },
     {
       id: 'sample-at-4',
-      title: 'Signal Lantern Wayfinding',
-      description: 'Type and light as wayfinding object in three-dimensional space.',
-      student: 'Bayu Aditya',
-      lecturer: 'Maya Anggraini, M.Ds.',
+      title: 'K for Kupu-Kupu',
+      description: 'Oleh:\nTrisna Suhanta\n24027197',
+      student: 'Trisna Suhanta',
+      lecturer: 'Arif Budiman, M.Kom.',
       className: 'Applied Typography',
-      classCode: 'AT201',
-      period: 'Odd 2026/2027',
+      classCode: 'Mon, 07.51',
+      period: 'Odd 2025/2026',
       is2D: false,
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Lantern/glTF-Binary/Lantern.glb',
+      modelUrl: '3d/TA_4.glb',
       thumbnail: '',
       sample: true
     },
     {
       id: 'sample-at-5',
-      title: '3D Typographic Mascot Mark',
-      description: 'A mascot mark explored as a 3D volumetric sculpture.',
-      student: 'Citra Dewi',
-      lecturer: 'Maya Anggraini, M.Ds.',
+      title: 'N for Naga',
+      description: 'Oleh:\nAdito Neta Pratama\n24027116',
+      student: 'Adito Neta Pratama',
+      lecturer: 'Arif Budiman, M.Kom.',
       className: 'Applied Typography',
-      classCode: 'AT201',
-      period: 'Odd 2026/2027',
+      classCode: 'Tue, 7.51',
+      period: 'Odd 2025/2026',
       is2D: false,
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Duck/glTF-Binary/Duck.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-at-6',
-      title: 'Test 001',
-      description: 'Testing file',
-      student: 'Anis',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Applied Typography',
-      classCode: 'AT201',
-      period: 'Odd 2026/2027',
-      is2D: false,
-      modelUrl: '3d/Test3.glb',
-      thumbnail: '',
-      sample: true
-    },
-    {
-      id: 'sample-at-7',
-      title: 'Test 002',
-      description: 'Testing file',
-      student: 'Ganjar Tiga',
-      lecturer: 'Maya Anggraini, M.Ds.',
-      className: 'Applied Typography',
-      classCode: 'AT201',
-      period: 'Odd 2026/2027',
-      is2D: false,
-      modelUrl: '3d/Test3.glb',
+      modelUrl: '3d/TA_5.glb',
       thumbnail: '',
       sample: true
     }
@@ -511,32 +539,24 @@
       select.value = values.includes(current) ? current : '';
     }
 
-    /** Automatically inspect items database to build dynamic class code options */
+    /** Automatically inspect items database to build dynamic class name options */
     function refreshFilterOptions() {
-      const classMap = new Map();
-      items.forEach(i => {
-        if (i.classCode && !classMap.has(i.classCode)) {
-          classMap.set(i.classCode, i.className || i.classCode);
-        }
-      });
+      const classNames = uniqueSorted(items.map(i => i.className).filter(Boolean));
 
-      const sortedCodes = [...classMap.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-
-      const currentCode = classFilter.value;
+      const currentClass = classFilter.value;
       classFilter.replaceChildren(el('option', { value: '', text: 'All classes' }));
-      sortedCodes.forEach(code => {
-        const label = `${code} — ${classMap.get(code)}`;
-        classFilter.append(el('option', { value: code, text: label }));
+      classNames.forEach(name => {
+        classFilter.append(el('option', { value: name, text: name }));
       });
-      classFilter.value = sortedCodes.includes(currentCode) ? currentCode : '';
+      classFilter.value = classNames.includes(currentClass) ? currentClass : '';
 
       fillSelect(periodFilter, uniqueSorted(items.map(i => i.period)), 'All periods');
-      state.code = classFilter.value;
+      state.className = classFilter.value;
       state.period = periodFilter.value;
     }
 
     function matches(item) {
-      if (state.code && item.classCode !== state.code) return false;
+      if (state.className && item.className !== state.className) return false;
       if (state.period && item.period !== state.period) return false;
       if (state.q) {
         const hay = [item.student, item.lecturer, item.title, item.className, item.classCode].map(norm).join(' | ');
@@ -547,11 +567,17 @@
 
     function buildCard(item, index) {
       const thumb = el('div', { class: 'card-thumb' });
-      thumb.append(el('div', { class: 'placeholder', 'aria-hidden': 'true', text: initials(item.title) }));
+      const placeholder = el('div', { class: 'placeholder', 'aria-hidden': 'true', text: initials(item.title) });
+
       if (item.thumbnail) {
         const img = el('img', { src: item.thumbnail, alt: `Preview of ${item.title}`, loading: 'lazy' });
-        img.addEventListener('error', () => img.remove());
+        img.addEventListener('error', () => {
+          img.remove();
+          if (!thumb.contains(placeholder)) thumb.prepend(placeholder);
+        });
         thumb.append(img);
+      } else {
+        thumb.append(placeholder);
       }
       thumb.append(el('span', { class: 'badge-ar', text: item.is2D ? '2D · FRAME' : '3D · AR' }));
 
@@ -593,11 +619,11 @@
     }
 
     searchInput.addEventListener('input', () => { state.q = searchInput.value; render(); });
-    classFilter.addEventListener('change', () => { state.code = classFilter.value; render(); });
+    classFilter.addEventListener('change', () => { state.className = classFilter.value; render(); });
     periodFilter.addEventListener('change', () => { state.period = periodFilter.value; render(); });
     $('#resetFilters').addEventListener('click', () => {
       searchInput.value = ''; classFilter.value = ''; periodFilter.value = '';
-      state.q = state.code = state.period = '';
+      state.q = state.className = state.period = '';
       render();
     });
 
@@ -636,8 +662,10 @@
 
       host.replaceChildren();
       const loading = el('div', { class: 'viewer-loading', text: 'Loading artwork…' });
+      const viewerHint = $('#viewerHint');
 
       if (src) {
+        if (viewerHint) viewerHint.textContent = 'Drag to rotate · Pinch to zoom · AR on Android needs Google Play Services for AR and the Google app';
         const mv = document.createElement('model-viewer');
         mv.setAttribute('src', src);
         mv.setAttribute('alt', `3D model: ${item.title}`);
@@ -654,9 +682,13 @@
         mv.addEventListener('load', () => loading.classList.add('done'));
         host.append(mv, loading);
       } else {
-        const frameImg = el('div', { class: 'viewer-2d-display' },
+        if (viewerHint) viewerHint.textContent = 'Click artwork image to view in fullscreen with zoom and pan';
+        const frameImg = el('div', { class: 'viewer-2d-display', title: 'Click to expand fullscreen' },
           el('img', { src: item.thumbnail || '', alt: item.title })
         );
+        frameImg.addEventListener('click', () => {
+          if (item.thumbnail) openLightbox(item.thumbnail, item.title);
+        });
         loading.classList.add('done');
         host.append(frameImg);
       }
@@ -666,11 +698,165 @@
       $('.modal-close', modal).focus();
     }
 
+    /* ==========================================================
+       FULLSCREEN 2D IMAGE LIGHTBOX (Zoom & Pan)
+       ========================================================== */
+    const lightbox = $('#lightboxModal');
+    const lightboxImg = $('#lightboxImg');
+    const lightboxStage = $('#lightboxStage');
+    const lightboxCloseBtn = $('#lightboxCloseBtn');
+    const lightboxZoomVal = $('#lightboxZoomVal');
+    const lightboxZoomIn = $('#lightboxZoomIn');
+    const lightboxZoomOut = $('#lightboxZoomOut');
+    const lightboxReset = $('#lightboxReset');
+
+    let lbScale = 1;
+    let lbTranslateX = 0;
+    let lbTranslateY = 0;
+    let lbIsDragging = false;
+    let lbStartX = 0;
+    let lbStartY = 0;
+    let lbTouchDist = 0;
+
+    function applyLightboxTransform() {
+      if (!lightboxImg) return;
+      lightboxImg.style.transform = `translate(${lbTranslateX}px, ${lbTranslateY}px) scale(${lbScale})`;
+      if (lightboxZoomVal) lightboxZoomVal.textContent = `${Math.round(lbScale * 100)}%`;
+    }
+
+    function setLightboxZoom(newScale, centerX, centerY) {
+      const clamped = Math.min(6, Math.max(0.5, newScale));
+      if (centerX !== undefined && centerY !== undefined) {
+        const factor = clamped / lbScale;
+        lbTranslateX = centerX - factor * (centerX - lbTranslateX);
+        lbTranslateY = centerY - factor * (centerY - lbTranslateY);
+      }
+      lbScale = clamped;
+      applyLightboxTransform();
+    }
+
+    function resetLightboxZoom() {
+      lbScale = 1;
+      lbTranslateX = 0;
+      lbTranslateY = 0;
+      applyLightboxTransform();
+    }
+
+    function openLightbox(src, title) {
+      if (!lightbox || !lightboxImg) return;
+      lightboxImg.src = src;
+      lightboxImg.alt = title || 'Artwork image';
+      resetLightboxZoom();
+      lightbox.hidden = false;
+      document.body.classList.add('modal-open');
+      if (lightboxCloseBtn) lightboxCloseBtn.focus();
+    }
+
+    function closeLightbox() {
+      if (!lightbox || lightbox.hidden) return;
+      lightbox.hidden = true;
+      resetLightboxZoom();
+      // Keep modal-open if detail modal is still open
+      if (modal && !modal.hidden) {
+        document.body.classList.add('modal-open');
+      } else {
+        document.body.classList.remove('modal-open');
+      }
+    }
+
+    if (lightbox) {
+      if (lightboxCloseBtn) lightboxCloseBtn.addEventListener('click', closeLightbox);
+      const backdrop = $('.lightbox-backdrop', lightbox);
+      if (backdrop) backdrop.addEventListener('click', closeLightbox);
+
+      if (lightboxZoomIn) {
+        lightboxZoomIn.addEventListener('click', () => setLightboxZoom(lbScale + 0.35));
+      }
+      if (lightboxZoomOut) {
+        lightboxZoomOut.addEventListener('click', () => setLightboxZoom(lbScale - 0.35));
+      }
+      if (lightboxReset) {
+        lightboxReset.addEventListener('click', resetLightboxZoom);
+      }
+
+      // Mouse wheel zoom
+      lightboxStage.addEventListener('wheel', e => {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.25 : -0.25;
+        const rect = lightboxStage.getBoundingClientRect();
+        const cx = e.clientX - rect.left - rect.width / 2;
+        const cy = e.clientY - rect.top - rect.height / 2;
+        setLightboxZoom(lbScale + delta, cx, cy);
+      }, { passive: false });
+
+      // Drag / pan
+      lightboxStage.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        lbIsDragging = true;
+        lbStartX = e.clientX - lbTranslateX;
+        lbStartY = e.clientY - lbTranslateY;
+        lightboxStage.classList.add('dragging');
+      });
+
+      window.addEventListener('mousemove', e => {
+        if (!lbIsDragging) return;
+        lbTranslateX = e.clientX - lbStartX;
+        lbTranslateY = e.clientY - lbStartY;
+        applyLightboxTransform();
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (lbIsDragging) {
+          lbIsDragging = false;
+          lightboxStage.classList.remove('dragging');
+        }
+      });
+
+      // Touch events (Pinch-to-zoom & touch drag)
+      lightboxStage.addEventListener('touchstart', e => {
+        if (e.touches.length === 1) {
+          lbIsDragging = true;
+          lbStartX = e.touches[0].clientX - lbTranslateX;
+          lbStartY = e.touches[0].clientY - lbTranslateY;
+        } else if (e.touches.length === 2) {
+          lbIsDragging = false;
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          lbTouchDist = Math.hypot(dx, dy);
+        }
+      }, { passive: true });
+
+      lightboxStage.addEventListener('touchmove', e => {
+        if (e.touches.length === 1 && lbIsDragging) {
+          lbTranslateX = e.touches[0].clientX - lbStartX;
+          lbTranslateY = e.touches[0].clientY - lbStartY;
+          applyLightboxTransform();
+        } else if (e.touches.length === 2) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const dist = Math.hypot(dx, dy);
+          if (lbTouchDist > 0) {
+            const scaleFactor = dist / lbTouchDist;
+            setLightboxZoom(lbScale * scaleFactor);
+          }
+          lbTouchDist = dist;
+        }
+      }, { passive: true });
+
+      lightboxStage.addEventListener('touchend', e => {
+        if (e.touches.length === 0) {
+          lbIsDragging = false;
+          lbTouchDist = 0;
+        }
+      });
+    }
+
     window.openArchiveDetail = id => {
       if (modal.hidden) openDetail(id);
     };
 
     function closeDetail() {
+      closeLightbox();
       modal.hidden = true;
       document.body.classList.remove('modal-open');
       host.replaceChildren();
@@ -678,7 +864,15 @@
     }
 
     modal.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeDetail(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeDetail(); });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (lightbox && !lightbox.hidden) {
+          closeLightbox();
+        } else if (!modal.hidden) {
+          closeDetail();
+        }
+      }
+    });
 
     count.textContent = 'Loading archive…';
     items = await loadAll();
@@ -723,29 +917,42 @@
        with fallback defaults below:
        ========================================================== */
     const catalog = (CFG && CFG.CLASS_CATALOG) || {
-      'Ilustrasi Desain': {
-        'IL101': 'Dosen A',
-        'IL102': 'Dosen B',
-        'IL103': 'Dosen C'
+      'Illustration': {
+        'Wed, 09.41': 'Aditya Hanum Widarsa S.Ds., M.Sn.',
+        'Thu, 07.51': 'Riri Trinanda S.Pd., M.Sn.'
       },
-      'Fotografi Iklan': {
-        'AP201': 'Dosen D',
-        'AP202': 'Dosen E',
-        'AP203': 'Dosen F'
-      },
-      'Tipografi Aplikatif': {
-        'AT201': 'Dosen G',
-        'AT202': 'Dosen H',
-        'AT203': 'Dosen I'
+      'Photography': {
+        'Wed, 13.20': 'Fauzan Aulia S.Ds., M.Sn.',
+        'Mon, 07.51': 'Rifqy Aulia Zaim, S.Pd., M.Pd.T.'
       },
       'Advertising Photography': {
-        'AP201': 'Dosen J',
-        'AP202': 'Dosen K',
-        'AP203': 'Dosen L'
+        'Wed, 13.20': 'Fauzan Aulia S.Ds., M.Sn.'
+      },
+      'Applied Typography': {
+        'Tue, 13.20': 'Hendra afriwan, S.Sn, M.Sn',
+        'Mon, 07.51': 'Arif Budiman, M.Kom',
+        'Tue, 7.51': 'Arif Budiman, M.Kom.'
+      },
+      // Aliases for localized names if present
+      'Ilustrasi Desain': {
+        'Wed, 09.41': 'Aditya Hanum Widarsa S.Ds., M.Sn.',
+        'Thu, 07.51': 'Riri Trinanda S.Pd., M.Sn.'
+      },
+      'Fotografi Iklan': {
+        'Wed, 13.20': 'Fauzan Aulia S.Ds., M.Sn.',
+        'Mon, 07.51': 'Rifqy Aulia Zaim, S.Pd., M.Pd.T.'
+      },
+      'Tipografi Aplikatif': {
+        'Tue, 13.20': 'Hendra afriwan, S.Sn, M.Sn',
+        'Mon, 07.51': 'Arif Budiman, M.Kom',
+        'Tue, 7.51': 'Arif Budiman, M.Kom.'
       }
     };
 
-    const isTipografi = cls => (cls || '').trim().toLowerCase() === 'tipografi aplikatif';
+    const isTipografi = cls => {
+      const c = (cls || '').trim().toLowerCase();
+      return c === 'tipografi aplikatif' || c === 'applied typography';
+    };
 
     function updateFileAcceptance() {
       const cls = classSelect.value;

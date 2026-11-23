@@ -124,8 +124,8 @@
         <input id="searchInput" type="search" placeholder="Search by student name or lecturer…" autocomplete="off">
       </div>
       <div class="field">
-        <label for="classFilter" class="sr-only">Filter by class code</label>
-        <select id="classFilter"><option value="">All class codes</option></select>
+        <label for="classFilter" class="sr-only">Filter by class</label>
+        <select id="classFilter"><option value="">All classes</option></select>
       </div>
       <div class="field">
         <label for="periodFilter" class="sr-only">Filter by time period</label>
@@ -185,7 +185,7 @@
       <button type="button" class="modal-close" data-close aria-label="Close detail view">×</button>
       <div class="viewer-wrap">
         <div id="viewerHost" class="viewer-host"></div>
-        <p class="viewer-hint">Drag to rotate · Pinch to zoom · AR on Android needs Google Play Services for AR and the Google app</p>
+        <p class="viewer-hint" id="viewerHint">Drag to rotate · Pinch to zoom · AR on Android needs Google Play Services for AR and the Google app</p>
       </div>
       <div class="detail-info">
         <p class="eyebrow" id="detailClass"></p>
@@ -194,12 +194,28 @@
         <dl class="meta">
           <div><dt>Student</dt><dd id="detailStudent"></dd></div>
           <div><dt>Lecturer</dt><dd id="detailLecturer"></dd></div>
-          <div><dt>Class code</dt><dd id="detailCode"></dd></div>
+          <div><dt>Class schedule</dt><dd id="detailCode"></dd></div>
           <div><dt>Period</dt><dd id="detailPeriod"></dd></div>
         </dl>
         <button type="button" id="deleteBtn" class="btn btn-danger" hidden>Delete this artwork</button>
       </div>
     </div>
+  </div>
+
+  <!-- Fullscreen 2D Image Lightbox (Zoom & Pan) -->
+  <div id="lightboxModal" class="lightbox-modal" hidden role="dialog" aria-modal="true" aria-label="Fullscreen artwork view">
+    <div class="lightbox-backdrop"></div>
+    <button type="button" class="lightbox-close" id="lightboxCloseBtn" aria-label="Close fullscreen view">×</button>
+    <div class="lightbox-toolbar">
+      <button type="button" class="lightbox-btn" id="lightboxZoomOut" aria-label="Zoom out">−</button>
+      <span class="lightbox-zoom-val" id="lightboxZoomVal">100%</span>
+      <button type="button" class="lightbox-btn" id="lightboxZoomIn" aria-label="Zoom in">+</button>
+      <button type="button" class="lightbox-btn" id="lightboxReset" aria-label="Reset zoom">Reset</button>
+    </div>
+    <div class="lightbox-stage" id="lightboxStage">
+      <img id="lightboxImg" class="lightbox-img" alt="Fullscreen artwork display">
+    </div>
+    <p class="lightbox-hint">Scroll or pinch to zoom · Drag to pan · Press Esc or × to close</p>
   </div>
 
   <!-- Student Profile Modal -->
@@ -232,8 +248,8 @@
           <div class="profile-courses">
             <h3>Enrolled Courses</h3>
             <ul>
-              <li><span class="code">IL101</span> Ilustrasi Desain</li>
-              <li><span class="code">PH101</span> Fotografi</li>
+              <li><span class="code">IL101</span> Illustration</li>
+              <li><span class="code">PH101</span> Photography</li>
               <li><span class="code">AT201</span> Applied Typography</li>
               <li><span class="code">AP201</span> Advertising Photography</li>
             </ul>
@@ -251,8 +267,10 @@
       <div class="about-card">
         <img src="icons/Logo_Virty_Logo_Virty_Light.svg" alt="Virty" class="about-logo">
         <h2 id="aboutTitle">About DKV Virtual Gallery</h2>
-        <p>This virtual archive features high-resolution student artwork scans and 3D models presented in Augmented Reality.</p>
+        <p>This virtual archive features high-resolution DKV's student artwork scans and 3D models presented in Augmented Reality.</p>
         <p>Switch between the <strong>Catalogue</strong> grid and the interactive <strong>3D Gallery</strong> hall to inspect projects in real time.</p>
+        <p><strong>DKV Virtual Gallery</strong> or <strong>Virty</strong> was made as an submission for <strong>New Media</strong> assigment.</p>
+        <p>Group members:<br>1. Debyta Fitriani (21027051)<br>2. Dindatul Afizah (24027013)<br>3. Dyah Okta Deviani (23027193)<br>4. Nafisah Putri (24027029)<br>5. Natasya (24027094)<br>6. Sawwalina fitri rahmadillah (24027197)<br>7. Tasa Maharani (24027139)</p>
       </div>
     </div>
   </div>

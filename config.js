@@ -16,25 +16,34 @@ window.ARCHIVE_CONFIG = {
        }
      ========================================================== */
   CLASS_CATALOG: {
-    'Ilustrasi Desain': {
-      'IL101': 'Dosen A',
-      'IL102': 'Dosen B',
-      'IL103': 'Dosen C'
+    'Illustration': {
+      'Wed, 09.41': 'Aditya Hanum Widarsa S.Ds., M.Sn.',
+      'Thu, 07.51': 'Riri Trinanda S.Pd., M.Sn.'
     },
-    'Fotografi Iklan': {
-      'AP201': 'Dosen D',
-      'AP202': 'Dosen E',
-      'AP203': 'Dosen F'
-    },
-    'Tipografi Aplikatif': {
-      'AT201': 'Dosen G',
-      'AT202': 'Dosen H',
-      'AT203': 'Dosen I'
+    'Photography': {
+      'Wed, 13.20': 'Fauzan Aulia S.Ds., M.Sn.',
+      'Mon, 07.51': 'Rifqy Aulia Zaim, S.Pd., M.Pd.T.'
     },
     'Advertising Photography': {
-      'AP201': 'Dosen J',
-      'AP202': 'Dosen K',
-      'AP203': 'Dosen L'
+      'Wed, 13.20': 'Fauzan Aulia S.Ds., M.Sn.'
+    },
+    'Applied Typography': {
+      'Tue, 13.20': 'Hendra afriwan, S.Sn, M.Sn',
+      'Mon, 07.51': 'Arif Budiman, M.Kom',
+      'Tue, 7.51': 'Arif Budiman, M.Kom.'
+    },
+    'Ilustrasi Desain': {
+      'Wed, 09.41': 'Aditya Hanum Widarsa S.Ds., M.Sn.',
+      'Thu, 07.51': 'Riri Trinanda S.Pd., M.Sn.'
+    },
+    'Fotografi Iklan': {
+      'Wed, 13.20': 'Fauzan Aulia S.Ds., M.Sn.',
+      'Mon, 07.51': 'Rifqy Aulia Zaim, S.Pd., M.Pd.T.'
+    },
+    'Tipografi Aplikatif': {
+      'Tue, 13.20': 'Hendra afriwan, S.Sn, M.Sn',
+      'Mon, 07.51': 'Arif Budiman, M.Kom',
+      'Tue, 7.51': 'Arif Budiman, M.Kom.'
     }
   }
 };
