@@ -677,13 +677,13 @@ export class ArchitecturalGallery {
    */
   createWallFramedArtwork(group, slot, art, plaqueGeometry, plaqueCache) {
     const artGroup = new THREE.Group();
-    artGroup.position.set(slot.x, 2.1, slot.z);
+    artGroup.position.set(slot.x, 2.2, slot.z);
     artGroup.rotation.y = slot.yaw;
     artGroup.userData = { art };
 
     const borderT = 0.1;
-    const maxInnerW = 1.6;
-    const maxInnerH = 2.0;
+    const maxInnerW = 2.4;
+    const maxInnerH = 2.6;
 
     const frameMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 });
     const canvasMat = new THREE.MeshBasicMaterial();
@@ -720,7 +720,7 @@ export class ArchitecturalGallery {
       canvasMesh.geometry = new THREE.PlaneGeometry(w, h);
       canvasMesh.position.z = frameD / 2 + 0.005;
 
-      plaqueMesh.position.set(frameW / 2 + 0.75, -frameH / 2 + 0.35, 0.02);
+      plaqueMesh.position.set(frameW / 2 + 0.65, -frameH / 2 + 0.35, 0.02);
     };
 
     if (art.thumbnail) {

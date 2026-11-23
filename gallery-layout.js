@@ -199,66 +199,150 @@ function perimPoint(s, hx, hz) {
   s -= a; return [-hx, hz - s];
 }
 
-/** Slot layout generator separating 2D Wall slots from 3D Pedestal slots */
+/** Slot layout generator distributing artworks to all walls while avoiding doors and matching wall orientation */
 export function artSlots(e, itemsList) {
+  if (!itemsList || itemsList.length === 0) return [];
+
   const { W, D, exit } = e;
-  const doors = [
-    { x: 0, z: D / 2 },
-    { x: exit.pos[0], z: exit.pos[1] }
+  const doorClearance = 2.8;
+  const cornerMargin = 2.2;
+
+  // 4 walls of the room with their inner-facing yaws
+  const walls = [
+    {
+      side: 'N',
+      halfL: W / 2,
+      yaw: 0,
+      hasDoor: exit.side === 'N',
+      doorPos: exit.side === 'N' ? exit.pos[0] : 0
+    },
+    {
+      side: 'W',
+      halfL: D / 2,
+      yaw: Math.PI / 2,
+      hasDoor: exit.side === 'W',
+      doorPos: exit.side === 'W' ? exit.pos[1] : 0
+    },
+    {
+      side: 'E',
+      halfL: D / 2,
+      yaw: -Math.PI / 2,
+      hasDoor: exit.side === 'E',
+      doorPos: exit.side === 'E' ? exit.pos[1] : 0
+    },
+    {
+      side: 'S',
+      halfL: W / 2,
+      yaw: Math.PI,
+      hasDoor: true, // Entrance door is always at South (x: 0, z: D/2)
+      doorPos: 0
+    }
   ];
 
-  const isNearDoor = (x, z) => doors.some(d => Math.hypot(x - d.x, z - d.z) < 3.5);
+  // Calculate usable intervals on each wall that safely avoid doors and room corners
+  for (const w of walls) {
+    const intervals = [];
+    const start = -w.halfL + cornerMargin;
+    const end = w.halfL - cornerMargin;
 
-  const wallSlots = [];
-  const insetWall = 0.25;
+    if (w.hasDoor) {
+      const dMin = w.doorPos - doorClearance;
+      const dMax = w.doorPos + doorClearance;
+      // Usable segment before / left of door
+      if (dMin - start >= 1.6) {
+        intervals.push([start, Math.min(end, dMin)]);
+      }
+      // Usable segment after / right of door
+      if (end - dMax >= 1.6) {
+        intervals.push([Math.max(start, dMax), end]);
+      }
+    } else {
+      if (end - start >= 1.6) {
+        intervals.push([start, end]);
+      }
+    }
+    w.intervals = intervals;
+  }
 
-  // South wall
-  for (let x = -W / 2 + 3; x <= W / 2 - 3; x += 3.8) {
-    if (!isNearDoor(x, D / 2)) wallSlots.push({ x, z: D / 2 - insetWall, yaw: Math.PI });
-  }
-  // North wall
-  for (let x = -W / 2 + 3; x <= W / 2 - 3; x += 3.8) {
-    if (!isNearDoor(x, -D / 2)) wallSlots.push({ x, z: -D / 2 + insetWall, yaw: 0 });
-  }
-  // West wall
-  for (let z = -D / 2 + 3; z <= D / 2 - 3; z += 3.8) {
-    if (!isNearDoor(-W / 2, z)) wallSlots.push({ x: -W / 2 + insetWall, z, yaw: Math.PI / 2 });
-  }
-  // East wall
-  for (let z = -D / 2 + 3; z <= D / 2 - 3; z += 3.8) {
-    if (!isNearDoor(W / 2, z)) wallSlots.push({ x: W / 2 - insetWall, z, yaw: -Math.PI / 2 });
+  const availableWalls = walls.filter(w => w.intervals.length > 0);
+  if (availableWalls.length === 0) {
+    return itemsList.map(art => ({
+      x: 0,
+      z: 0,
+      yaw: 0,
+      is2D: Boolean(art.is2D || !art.modelUrl || art.type === '2d')
+    }));
   }
 
-  const pedestalSlots = [];
-  for (const inset of [3.2, 6.8]) {
-    const hx = W / 2 - inset, hz = D / 2 - inset;
-    if (hx < 1.5 || hz < 1.5) break;
-    const per = 4 * (hx + hz);
-    const count = Math.max(4, Math.floor(per / 4.4));
-    const step = per / count;
-    for (let i = 0; i < count; i++) {
-      const p = perimPoint(i * step + step / 2, hx, hz);
-      if (!isNearDoor(p[0], p[1])) {
-        pedestalSlots.push({ x: p[0], z: p[1], yaw: Math.atan2(-p[0], -p[1]) });
+  // Distribute items round-robin across available walls so all walls receive artworks
+  const wallItems = {};
+  for (const w of availableWalls) {
+    wallItems[w.side] = [];
+  }
+
+  itemsList.forEach((art, idx) => {
+    const targetWall = availableWalls[idx % availableWalls.length];
+    const is2D = Boolean(art.is2D || !art.modelUrl || art.type === '2d');
+    wallItems[targetWall.side].push({ idx, art, is2D });
+  });
+
+  const slots = new Array(itemsList.length);
+  const inset2D = 0.22;
+  const inset3D = 1.5;
+
+  for (const w of availableWalls) {
+    const assigned = wallItems[w.side];
+    if (!assigned || assigned.length === 0) continue;
+
+    const intervals = w.intervals;
+    const m = assigned.length;
+
+    // Distribute item count proportionally among the wall's open intervals
+    const ivCounts = new Array(intervals.length).fill(0);
+    for (let i = 0; i < m; i++) {
+      let bestIv = 0;
+      let minDensity = Infinity;
+      for (let k = 0; k < intervals.length; k++) {
+        const len = Math.max(0.1, intervals[k][1] - intervals[k][0]);
+        const density = ivCounts[k] / len;
+        if (density < minDensity) {
+          minDensity = density;
+          bestIv = k;
+        }
+      }
+      ivCounts[bestIv]++;
+    }
+
+    let curItemIdx = 0;
+    for (let ivIdx = 0; ivIdx < intervals.length; ivIdx++) {
+      const cnt = ivCounts[ivIdx];
+      if (cnt <= 0) continue;
+
+      const [sMin, sMax] = intervals[ivIdx];
+      const step = (sMax - sMin) / cnt;
+
+      for (let j = 0; j < cnt; j++) {
+        if (curItemIdx >= assigned.length) break;
+        const { idx, is2D } = assigned[curItemIdx++];
+        const t = sMin + (j + 0.5) * step;
+        const inset = is2D ? inset2D : inset3D;
+
+        let slot;
+        if (w.side === 'N') {
+          slot = { x: t, z: -D / 2 + inset, yaw: w.yaw, is2D };
+        } else if (w.side === 'S') {
+          slot = { x: t, z: D / 2 - inset, yaw: w.yaw, is2D };
+        } else if (w.side === 'W') {
+          slot = { x: -W / 2 + inset, z: t, yaw: w.yaw, is2D };
+        } else if (w.side === 'E') {
+          slot = { x: W / 2 - inset, z: t, yaw: w.yaw, is2D };
+        }
+        slots[idx] = slot;
       }
     }
   }
 
-  const assigned = [];
-  let wIdx = 0, pIdx = 0;
-
-  itemsList.forEach(art => {
-    const is2D = art.is2D || !art.modelUrl || art.type === '2d';
-    if (is2D) {
-      const slot = wallSlots[wIdx++] || pedestalSlots[pIdx++] || { x: 0, z: 0, yaw: 0 };
-      assigned.push({ ...slot, is2D: true });
-    } else {
-      const slot = pedestalSlots[pIdx++] || wallSlots[wIdx++] || { x: 0, z: 0, yaw: 0 };
-      assigned.push({ ...slot, is2D: false });
-    }
-  });
-
-  return assigned;
+  return slots;
 }
 
 export function groupByClass(items) {
