@@ -361,6 +361,27 @@
   }
 
   const getModel = id => idb('readonly', s => s.get(id));
+  const putModel = (id, blob) => idb('readwrite', s => s.put(blob, id));
+  const deleteModel = id => idb('readwrite', s => s.delete(id));
+  const publicUrl = path => `${SB_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+  const newId = () => (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  function xhrUpload(path, blob, contentType, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${SB_URL}/storage/v1/object/${BUCKET}/${path}`);
+      const headers = sbHeaders({ 'Content-Type': contentType, 'x-upsert': 'false', 'cache-control': 'max-age=31536000' });
+      Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+      xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
+        ? resolve()
+        : reject(new Error(`Upload failed (${xhr.status}). ${xhr.responseText || ''}`.slice(0, 200)));
+      xhr.onerror = () => reject(new Error('Network error while uploading. Check your connection and try again.'));
+      xhr.send(blob);
+    });
+  }
 
   function sbHeaders(extra = {}) {
     const h = { apikey: CFG.SUPABASE_ANON_KEY, ...extra };
@@ -649,6 +670,298 @@
     items = await loadAll();
     refreshFilterOptions();
     render();
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('added')) {
+      toast('Artwork saved to the archive! ✓');
+      history.replaceState(null, '', location.pathname);
+    }
+  }
+
+  /* ==========================================================
+     UPLOAD / SUBMIT PAGE
+     ========================================================== */
+  function initUpload() {
+    const form = $('#uploadForm');
+    if (!form) return;
+
+    const fileInput = $('#modelFile');
+    const previewBox = $('#previewBox');
+    const viewer = $('#previewViewer');
+    const errorBox = $('#formError');
+    const submitBtn = $('#submitBtn');
+    const modeNote = $('#modeNote');
+
+    // Dynamic Class & Lecturer controls
+    const classSelect = $('#className');
+    const classCodeRow = $('#classCodeRow');
+    const classCodeSelect = $('#classCode');
+    const lecturerRow = $('#lecturerRow');
+    const lecturerInput = $('#lecturer');
+
+    /* ==========================================================
+       CLASS & LECTURER CONFIGURATION
+       Reads from window.ARCHIVE_CONFIG.CLASS_CATALOG (in config.js)
+       with fallback defaults below:
+       ========================================================== */
+    const catalog = (CFG && CFG.CLASS_CATALOG) || {
+      'Ilustrasi Desain': {
+        'IL101': 'Dosen A',
+        'IL102': 'Dosen B',
+        'IL103': 'Dosen C'
+      },
+      'Fotografi Iklan': {
+        'AP201': 'Dosen D',
+        'AP202': 'Dosen E',
+        'AP203': 'Dosen F'
+      },
+      'Tipografi Aplikatif': {
+        'AT201': 'Dosen G',
+        'AT202': 'Dosen H',
+        'AT203': 'Dosen I'
+      }
+    };
+
+    // When a Class is picked, show Class Code options
+    classSelect.addEventListener('change', () => {
+      const selectedClass = classSelect.value;
+      classCodeSelect.innerHTML = '<option value="">Select Class Code…</option>';
+      lecturerInput.value = '';
+      lecturerRow.hidden = true;
+
+      if (selectedClass && catalog[selectedClass]) {
+        const codes = catalog[selectedClass];
+        Object.entries(codes).forEach(([code, lecturerName]) => {
+          const opt = document.createElement('option');
+          opt.value = code;
+          opt.textContent = `${code} (${lecturerName})`;
+          classCodeSelect.appendChild(opt);
+        });
+        classCodeRow.hidden = false;
+        classCodeSelect.required = true;
+      } else {
+        classCodeRow.hidden = true;
+        classCodeSelect.required = false;
+      }
+    });
+
+    // When Class Code is picked, auto-assign Lecturer
+    classCodeSelect.addEventListener('change', () => {
+      const selectedClass = classSelect.value;
+      const selectedCode = classCodeSelect.value;
+      if (selectedClass && selectedCode && catalog[selectedClass] && catalog[selectedClass][selectedCode]) {
+        lecturerInput.value = catalog[selectedClass][selectedCode];
+        lecturerRow.hidden = false;
+      } else {
+        lecturerInput.value = '';
+        lecturerRow.hidden = true;
+      }
+    });
+
+    let previewUrl = null;
+    let modelReady = false;
+
+    if (modeNote) {
+      modeNote.textContent = CLOUD
+        ? 'Shared archive: your artwork will be stored in Supabase and visible on all devices.'
+        : 'This-device mode: artworks are stored locally in your browser.';
+    }
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.hidden = !msg;
+      if (msg) errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    fileInput.addEventListener('change', () => {
+      showError('');
+      modelReady = false;
+      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+      const file = fileInput.files[0];
+      if (!file) { previewBox.hidden = true; return; }
+
+      if (!/\.glb$/i.test(file.name)) {
+        fileInput.value = ''; previewBox.hidden = true;
+        showError('Please choose a .glb file (export as GLB from Scaniverse or Blender).');
+        return;
+      }
+      if (file.size > MAX_FILE_MB * 1024 * 1024) {
+        fileInput.value = ''; previewBox.hidden = true;
+        showError(`That file is larger than ${MAX_FILE_MB} MB. Please use a smaller model.`);
+        return;
+      }
+      previewUrl = URL.createObjectURL(file);
+      viewer.setAttribute('src', previewUrl);
+      previewBox.hidden = false;
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    });
+
+    viewer.addEventListener('load', () => { modelReady = true; });
+    viewer.addEventListener('error', () => {
+      modelReady = false;
+      showError('This file could not be read as a valid .glb model.');
+    });
+
+    const waitForModel = (timeout = 8000) => new Promise(resolve => {
+      const start = Date.now();
+      (function check() {
+        if (modelReady || Date.now() - start > timeout) return resolve(modelReady);
+        setTimeout(check, 100);
+      })();
+    });
+
+    async function captureThumbnail() {
+      try {
+        if (!(await waitForModel())) return '';
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const dataUrl = await viewer.toDataURL('image/jpeg', 0.85);
+        const img = await new Promise((res, rej) => {
+          const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl;
+        });
+        const max = 560;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#1e1e1e';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', 0.75);
+      } catch (e) {
+        console.warn('Thumbnail capture failed', e);
+        return '';
+      }
+    }
+
+    async function saveToCloud(file, fields, thumbnail) {
+      const id = newId();
+      const modelPath = `models/${id}.glb`;
+      const thumbPath = `thumbs/${id}.jpg`;
+
+      await xhrUpload(modelPath, file, 'model/gltf-binary', p => {
+        submitBtn.textContent = `Uploading model ${Math.round(p * 100)}%…`;
+      });
+
+      let thumbnailUrl = '';
+      if (thumbnail) {
+        try {
+          submitBtn.textContent = 'Saving thumbnail…';
+          const thumbBlob = await (await fetch(thumbnail)).blob();
+          await xhrUpload(thumbPath, thumbBlob, 'image/jpeg');
+          thumbnailUrl = publicUrl(thumbPath);
+        } catch (e) {
+          console.warn('Thumbnail upload failed, continuing without it', e);
+        }
+      }
+
+      submitBtn.textContent = 'Publishing…';
+      const studentDisplayName = fields.nim ? `${fields.student} (${fields.nim})` : fields.student;
+
+      const res = await fetch(`${SB_URL}/rest/v1/artworks`, {
+        method: 'POST',
+        headers: sbHeaders({ 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
+        body: JSON.stringify({
+          id,
+          title: fields.title,
+          description: fields.description,
+          student: studentDisplayName,
+          lecturer: fields.lecturer,
+          class_name: fields.className,
+          class_code: fields.classCode,
+          period: fields.period,
+          model_url: publicUrl(modelPath),
+          thumbnail_url: thumbnailUrl
+        })
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Could not save artwork details (${res.status}): ${txt}`);
+      }
+    }
+
+    async function saveLocally(file, fields, thumbnail) {
+      const id = 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      await putModel(id, file);
+      const studentDisplayName = fields.nim ? `${fields.student} (${fields.nim})` : fields.student;
+      const items = loadLocalItems();
+      items.unshift({
+        id,
+        title: fields.title,
+        description: fields.description,
+        student: studentDisplayName,
+        studentName: fields.student,
+        nim: fields.nim,
+        lecturer: fields.lecturer,
+        className: fields.className,
+        classCode: fields.classCode,
+        period: fields.period,
+        thumbnail,
+        fileName: file.name,
+        createdAt: Date.now()
+      });
+      try {
+        saveLocalItems(items);
+      } catch (quotaErr) {
+        await deleteModel(id).catch(() => {});
+        throw new Error('Browser storage is full. Please delete some local artworks.');
+      }
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    }
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      showError('');
+
+      let firstBad = null;
+      form.querySelectorAll('[required]').forEach(field => {
+        const bad = field.type === 'file' ? !field.files.length : !field.value.trim();
+        field.classList.toggle('input-invalid', bad);
+        if (bad && !firstBad) firstBad = field;
+      });
+      if (firstBad) {
+        firstBad.focus();
+        showError('Please fill in all required fields and choose a .glb file.');
+        return;
+      }
+
+      const file = fileInput.files[0];
+      const fd = new FormData(form);
+      const fields = {
+        title: fd.get('title').trim(),
+        description: (fd.get('description') || '').trim(),
+        student: fd.get('student').trim(),
+        nim: (fd.get('nim') || '').trim(),
+        period: fd.get('period').trim(),
+        className: fd.get('className').trim(),
+        classCode: (fd.get('classCode') || '').trim().toUpperCase(),
+        lecturer: (fd.get('lecturer') || '').trim()
+      };
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Processing…';
+
+      try {
+        const thumbnail = await captureThumbnail();
+        if (CLOUD) {
+          await saveToCloud(file, fields, thumbnail);
+        } else {
+          await saveLocally(file, fields, thumbnail);
+        }
+        location.href = 'index.html?added=1';
+      } catch (err) {
+        console.error(err);
+        showError(err.message || 'Something went wrong while saving. Please try again.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save to archive';
+      }
+    });
+
+    form.addEventListener('input', e => e.target.classList.remove('input-invalid'));
+    form.addEventListener('change', e => e.target.classList.remove('input-invalid'));
   }
 
   window.arArchive = {
@@ -660,6 +973,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     const page = document.body.dataset.page;
     if (page === 'gallery') initGallery();
+    if (page === 'upload') initUpload();
   });
 
   /* Accordion card interactivity and "+ See More" filter connector */
