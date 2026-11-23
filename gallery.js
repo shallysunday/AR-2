@@ -181,6 +181,51 @@ function makeWallGradientTexture(pastelHex = '#B5EAD7') {
   return t;
 }
 
+const FALLBACK_PASTELS = [
+  '#F8C8DC', // pastel pink
+  '#B5EAD7', // pastel mint green
+  '#FFE5B4', // pastel peach
+  '#DCD6F7', // pastel lavender
+  '#FFDAC1', // pastel apricot
+  '#E2F0CB', // pastel lime
+  '#C7CEEA'  // pastel periwinkle
+];
+
+function getPastelColor(classCode, index = 0) {
+  if (classCode && CLASS_PASTEL_COLORS[classCode]) {
+    return CLASS_PASTEL_COLORS[classCode];
+  }
+  return FALLBACK_PASTELS[Math.abs(index) % FALLBACK_PASTELS.length];
+}
+
+function makeTunnelGradientTexture(colorA, colorB) {
+  const W = 512, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  // Horizontal gradient: blend along tunnel from colorA (Room A) to colorB (Room B)
+  const hGrad = ctx.createLinearGradient(0, 0, W, 0);
+  hGrad.addColorStop(0, colorA);
+  hGrad.addColorStop(1, colorB);
+  ctx.fillStyle = hGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Vertical highlight: arch vault crown is softly luminous, matching room walls
+  const vGrad = ctx.createLinearGradient(0, 0, 0, H);
+  vGrad.addColorStop(0, 'rgba(0, 0, 0, 0.04)');
+  vGrad.addColorStop(0.18, 'rgba(255, 255, 255, 0)');
+  vGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.6)');
+  vGrad.addColorStop(0.82, 'rgba(255, 255, 255, 0)');
+  vGrad.addColorStop(1, 'rgba(0, 0, 0, 0.04)');
+  ctx.fillStyle = vGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function makeFloorGridTexture(maxAnisotropy) {
   const S = 512;
   const c = document.createElement('canvas');
@@ -363,7 +408,10 @@ export class ArchitecturalGallery {
 
       this.buildWalls(room, entry, H, wallMat);
       this.createFloatingLighting(room, entry.W, entry.D);
-      this.createSign(room, entry, cls.code, cls.name, true, signGeo, signTextures);
+
+      const nextCi = (entry.ci + 1) % this.classes.length;
+      const nextCls = this.classes[nextCi] || cls;
+      this.createSign(room, entry, nextCls.code, nextCls.name, signGeo, signTextures);
 
       const slots = artSlots(entry, cls.items);
       cls.items.forEach((art, idx) => {
@@ -379,7 +427,7 @@ export class ArchitecturalGallery {
       this.scene.add(room);
     }
 
-    this.buildCorridors(this.plan.corridors, H, wallMaterials.values().next().value || new THREE.MeshLambertMaterial(), floorMat);
+    this.buildCorridors(this.plan.corridors, floorMat);
     if (modelQueue.length) this._loadModelsInBackground(modelQueue);
   }
 
@@ -405,9 +453,84 @@ export class ArchitecturalGallery {
     room.add(lightGroup);
   }
 
-  buildCorridors(corridors, height, wallMat, floorMat) {
+  buildArchedTunnel(length) {
+    const r = DOOR_W / 2;
+    const springY = 5.0 - r; // 3.2
+    const z0 = -0.05, z1 = length + 0.05;
+
+    // Cross-section profile points: left floor up through arch and down to right floor
+    const profile = [];
+    const wallSegs = 6;
+    for (let i = 0; i <= wallSegs; i++) {
+      profile.push({ x: -r, y: springY * (i / wallSegs) });
+    }
+    const archSegs = 20;
+    for (let i = 1; i < archSegs; i++) {
+      const theta = Math.PI - (Math.PI * i / archSegs);
+      profile.push({
+        x: r * Math.cos(theta),
+        y: springY + r * Math.sin(theta)
+      });
+    }
+    for (let i = 0; i <= wallSegs; i++) {
+      profile.push({ x: r, y: springY * (1 - i / wallSegs) });
+    }
+
+    const P = profile.length;
+    const lengthSegs = 16;
+    const positions = [];
+    const uvs = [];
+    const indices = [];
+
+    for (let j = 0; j <= lengthSegs; j++) {
+      const tz = j / lengthSegs;
+      const z = z0 + tz * (z1 - z0);
+      const u = tz;
+
+      for (let i = 0; i < P; i++) {
+        const p = profile[i];
+        positions.push(p.x, p.y, z);
+        const v = i / (P - 1);
+        uvs.push(u, v);
+      }
+    }
+
+    for (let j = 0; j < lengthSegs; j++) {
+      for (let i = 0; i < P - 1; i++) {
+        const a = j * P + i;
+        const b = (j + 1) * P + i;
+        const c = (j + 1) * P + (i + 1);
+        const d = j * P + (i + 1);
+        indices.push(a, b, d);
+        indices.push(b, c, d);
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  buildCorridors(corridors, floorMat) {
     corridors.forEach(corr => {
       if (!corr.len || corr.closed) return;
+
+      const fromCi = corr.fromCi ?? 0;
+      const toCi = corr.toCi ?? ((fromCi + 1) % this.classes.length);
+
+      const fromClass = this.classes[fromCi];
+      const toClass = this.classes[toCi];
+
+      const colorA = getPastelColor(fromClass?.code, fromCi);
+      const colorB = getPastelColor(toClass?.code, toCi);
+
+      const tunnelMat = new THREE.MeshLambertMaterial({
+        map: makeTunnelGradientTexture(colorA, colorB),
+        side: THREE.DoubleSide
+      });
 
       const group = new THREE.Group();
       const angle = Math.atan2(corr.d[0], corr.d[1]);
@@ -420,17 +543,15 @@ export class ArchitecturalGallery {
       floorMesh.position.set(0, 0, corr.len / 2);
       group.add(floorMesh);
 
-      const lWallGeo = new THREE.BoxGeometry(WALL_T, height, corr.len);
-      this._mapWallV(lWallGeo, height / 2, height);
-      const lWall = new THREE.Mesh(lWallGeo, wallMat);
-      lWall.position.set(-DOOR_W / 2 - WALL_T / 2, height / 2, corr.len / 2);
-      group.add(lWall);
+      // Continuous arch extending across the entire tunnel from door to door
+      const tunnelGeo = this.buildArchedTunnel(corr.len);
+      const tunnelMesh = new THREE.Mesh(tunnelGeo, tunnelMat);
+      group.add(tunnelMesh);
 
-      const rWallGeo = new THREE.BoxGeometry(WALL_T, height, corr.len);
-      this._mapWallV(rWallGeo, height / 2, height);
-      const rWall = new THREE.Mesh(rWallGeo, wallMat);
-      rWall.position.set(DOOR_W / 2 + WALL_T / 2, height / 2, corr.len / 2);
-      group.add(rWall);
+      // Subtle ambient illumination inside tunnel
+      const tunnelLight = new THREE.PointLight(0xfff5ea, 12, 10, 1.5);
+      tunnelLight.position.set(0, 3.5, corr.len / 2);
+      group.add(tunnelLight);
 
       this.scene.add(group);
     });
@@ -515,7 +636,7 @@ export class ArchitecturalGallery {
     if (exit.side !== 'E') segment(halfW, -halfD, halfW, halfD);
   }
 
-  createSign(group, entry, code, name, isEntrance, geometry, cache) {
+  createSign(group, entry, code, name, geometry, cache) {
     if (!cache.has(code)) {
       const texture = new THREE.CanvasTexture(makeSignCanvas(code, name));
       texture.colorSpace = THREE.SRGBColorSpace;
@@ -525,13 +646,27 @@ export class ArchitecturalGallery {
     const sign = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: cache.get(code), transparent: true }));
     const wallInset = WALL_T / 2 + 0.04;
     const signY = 3.2;
+    const offset = DOOR_W / 2 + 1.6;
 
-    if (isEntrance) {
-      sign.position.set(DOOR_W / 2 + 1.4, signY, entry.D / 2 - wallInset);
-      sign.rotation.y = Math.PI;
-    } else {
-      sign.position.set(entry.exit.pos[0] + DOOR_W / 2 + 1.4, signY, -entry.D / 2 + wallInset);
-      sign.rotation.y = 0;
+    const exit = entry.exit;
+    if (!exit) return;
+
+    // Place the directional sign beside the door leading to the next room
+    if (exit.side === 'N') {
+      let sx = exit.pos[0] + offset;
+      if (sx + 1.3 > entry.W / 2 - 0.5) sx = exit.pos[0] - offset;
+      sign.position.set(sx, signY, -entry.D / 2 + wallInset);
+      sign.rotation.y = 0; // Facing +z into the room towards approaching visitor
+    } else if (exit.side === 'W') {
+      let sz = exit.pos[1] + offset;
+      if (sz + 1.3 > entry.D / 2 - 0.5) sz = exit.pos[1] - offset;
+      sign.position.set(-entry.W / 2 + wallInset, signY, sz);
+      sign.rotation.y = Math.PI / 2; // Facing +x into the room
+    } else if (exit.side === 'E') {
+      let sz = exit.pos[1] - offset;
+      if (sz - 1.3 < -entry.D / 2 + 0.5) sz = exit.pos[1] + offset;
+      sign.position.set(entry.W / 2 - wallInset, signY, sz);
+      sign.rotation.y = -Math.PI / 2; // Facing -x into the room
     }
     group.add(sign);
   }

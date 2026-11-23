@@ -102,7 +102,7 @@ export function planLayout(counts, yaw0 = 0, k = 0) {
 
     cur.exit = best.exit;
     collisions += best.hits;
-    corridors.push({ E: best.E, d: best.d, len: CORR_L, closed: false });
+    corridors.push({ E: best.E, d: best.d, len: CORR_L, closed: false, fromCi: cur.ci, toCi: nextCi });
     placed.push({ box: best.cb, tag: 'corr' + i });
     cur = best.nextRoom;
   }
@@ -114,7 +114,7 @@ export function planLayout(counts, yaw0 = 0, k = 0) {
   {
     const E = worldOf(cur.P, cur.yaw, cur.exit.pos);
     const d = rot(cur.exit.normal, cur.yaw);
-    const stub = { E, d, len: CORR_L, closed: true };
+    const stub = { E, d, len: CORR_L, closed: true, fromCi: cur.ci, toCi: (cur.ci + 1) % N };
     const sb = corrBoxOf(E, d, CORR_L);
     for (const p of placed) if (p.tag !== 'post' && boxesOverlap(sb, p.box)) collisions++;
     corridors.push(stub);
@@ -138,14 +138,14 @@ export function planLayout(counts, yaw0 = 0, k = 0) {
       if (boxesOverlap(cb, p.box)) collisions++;
       if (boxesOverlap(pb, p.box)) collisions++;
     }
-    corridors.unshift({ E: Epre, d: dPre, len: CORR_L, closed: false });
+    corridors.unshift({ E: Epre, d: dPre, len: CORR_L, closed: false, fromCi: N - 1, toCi: 0 });
     placed.push({ box: cb, tag: 'precorr' }, { box: pb, tag: 'pre' });
 
     const Qp = worldOf(pre.P, pre.yaw, [0, pre.D / 2]);
     const dp = rot([0, 1], pre.yaw);
     const sb = corrBoxOf(Qp, dp, CORR_L);
     for (const p of placed) if (p.tag !== 'pre' && p.tag !== 'precorr' && boxesOverlap(sb, p.box)) collisions++;
-    corridors.push({ E: Qp, d: dp, len: CORR_L, closed: true });
+    corridors.push({ E: Qp, d: dp, len: CORR_L, closed: true, fromCi: N - 1, toCi: 0 });
     entries.unshift(pre);
   }
 
