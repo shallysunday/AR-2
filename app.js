@@ -265,7 +265,8 @@
       classCode: 'AT201',
       period: 'Odd 2026/2027',
       is2D: false,
-      modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Avocado/glTF-Binary/Avocado.glb',
+      // modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Avocado/glTF-Binary/Avocado.glb',
+      modelUrl: '3d/3d.glb',
       thumbnail: '',
       sample: true
     },
@@ -296,7 +297,7 @@
       modelUrl: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Duck/glTF-Binary/Duck.glb',
       thumbnail: '',
       sample: true
-    }
+    },
     {
       id: 'sample-at-6',
       title: 'Test 001',
