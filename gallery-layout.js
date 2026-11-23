@@ -30,7 +30,7 @@ export function yawFor(localVec, worldVec) {
 }
 
 export function roomDims(count, ci) {
-  const S = Math.min(36, Math.ceil(Math.max(16, 6 + (count + 2) * 1.2)));
+  const S = Math.min(40, Math.ceil(Math.max(20, 10 + count * 1.8)));
   return { W: S + (ci % 2 === 1 ? 4 : 0), D: S };
 }
 
@@ -199,7 +199,7 @@ function perimPoint(s, hx, hz) {
   s -= a; return [-hx, hz - s];
 }
 
-/** Slot layout generator distributing artworks to all walls while avoiding doors and matching wall orientation */
+/** Slot layout generator distributing artworks to all walls while avoiding doors and guaranteeing ample spacing */
 export function artSlots(e, itemsList) {
   if (!itemsList || itemsList.length === 0) return [];
 
@@ -239,33 +239,50 @@ export function artSlots(e, itemsList) {
     }
   ];
 
-  // Calculate usable intervals on each wall that safely avoid doors and room corners
+  // Calculate usable segments on each wall that safely clear doors and corners
+  const segments = [];
   for (const w of walls) {
-    const intervals = [];
     const start = -w.halfL + cornerMargin;
     const end = w.halfL - cornerMargin;
+    const rawIntervals = [];
 
     if (w.hasDoor) {
       const dMin = w.doorPos - doorClearance;
       const dMax = w.doorPos + doorClearance;
-      // Usable segment before / left of door
-      if (dMin - start >= 1.6) {
-        intervals.push([start, Math.min(end, dMin)]);
+      if (dMin - start >= 2.0) {
+        rawIntervals.push([start, Math.min(end, dMin)]);
       }
-      // Usable segment after / right of door
-      if (end - dMax >= 1.6) {
-        intervals.push([Math.max(start, dMax), end]);
+      if (end - dMax >= 2.0) {
+        rawIntervals.push([Math.max(start, dMax), end]);
       }
     } else {
-      if (end - start >= 1.6) {
-        intervals.push([start, end]);
+      if (end - start >= 2.0) {
+        rawIntervals.push([start, end]);
       }
     }
-    w.intervals = intervals;
+
+    for (const [sMin, sMax] of rawIntervals) {
+      const tStart = sMin + 1.5;
+      const tEnd = sMax - 2.2;
+      const usableRange = tEnd - tStart;
+      if (usableRange >= 0) {
+        const cap = 1 + Math.floor(usableRange / 5.2);
+        segments.push({
+          side: w.side,
+          yaw: w.yaw,
+          sMin,
+          sMax,
+          tStart,
+          tEnd,
+          usableRange,
+          cap,
+          items: []
+        });
+      }
+    }
   }
 
-  const availableWalls = walls.filter(w => w.intervals.length > 0);
-  if (availableWalls.length === 0) {
+  if (segments.length === 0) {
     return itemsList.map(art => ({
       x: 0,
       z: 0,
@@ -274,72 +291,67 @@ export function artSlots(e, itemsList) {
     }));
   }
 
-  // Distribute items round-robin across available walls so all walls receive artworks
-  const wallItems = {};
-  for (const w of availableWalls) {
-    wallItems[w.side] = [];
+  // Group segments by wall
+  const wallSegs = {};
+  for (const s of segments) {
+    if (!wallSegs[s.side]) wallSegs[s.side] = [];
+    wallSegs[s.side].push(s);
   }
 
+  // Distribute items round-robin across available walls so all walls receive artworks
+  const wallOrder = ['N', 'W', 'E', 'S'];
+  const availableWalls = wallOrder.filter(w => wallSegs[w] && wallSegs[w].some(s => s.cap > 0));
+  const fallbackWalls = wallOrder.filter(w => wallSegs[w]);
+
   itemsList.forEach((art, idx) => {
-    const targetWall = availableWalls[idx % availableWalls.length];
     const is2D = Boolean(art.is2D || !art.modelUrl || art.type === '2d');
-    wallItems[targetWall.side].push({ idx, art, is2D });
+    const wallPool = availableWalls.length > 0 ? availableWalls : fallbackWalls;
+    const targetWall = wallPool[idx % wallPool.length];
+    const segs = wallSegs[targetWall] || segments;
+
+    const bestSeg = segs.reduce((best, s) => {
+      const rem = s.cap - s.items.length;
+      const bestRem = best.cap - best.items.length;
+      return rem > bestRem ? s : best;
+    }, segs[0]);
+
+    bestSeg.items.push({ idx, art, is2D });
   });
 
   const slots = new Array(itemsList.length);
   const inset2D = 0.22;
   const inset3D = 1.5;
 
-  for (const w of availableWalls) {
-    const assigned = wallItems[w.side];
-    if (!assigned || assigned.length === 0) continue;
+  for (const seg of segments) {
+    const m = seg.items.length;
+    if (m === 0) continue;
 
-    const intervals = w.intervals;
-    const m = assigned.length;
-
-    // Distribute item count proportionally among the wall's open intervals
-    const ivCounts = new Array(intervals.length).fill(0);
-    for (let i = 0; i < m; i++) {
-      let bestIv = 0;
-      let minDensity = Infinity;
-      for (let k = 0; k < intervals.length; k++) {
-        const len = Math.max(0.1, intervals[k][1] - intervals[k][0]);
-        const density = ivCounts[k] / len;
-        if (density < minDensity) {
-          minDensity = density;
-          bestIv = k;
-        }
-      }
-      ivCounts[bestIv]++;
-    }
-
-    let curItemIdx = 0;
-    for (let ivIdx = 0; ivIdx < intervals.length; ivIdx++) {
-      const cnt = ivCounts[ivIdx];
-      if (cnt <= 0) continue;
-
-      const [sMin, sMax] = intervals[ivIdx];
-      const step = (sMax - sMin) / cnt;
-
-      for (let j = 0; j < cnt; j++) {
-        if (curItemIdx >= assigned.length) break;
-        const { idx, is2D } = assigned[curItemIdx++];
-        const t = sMin + (j + 0.5) * step;
-        const inset = is2D ? inset2D : inset3D;
-
-        let slot;
-        if (w.side === 'N') {
-          slot = { x: t, z: -D / 2 + inset, yaw: w.yaw, is2D };
-        } else if (w.side === 'S') {
-          slot = { x: t, z: D / 2 - inset, yaw: w.yaw, is2D };
-        } else if (w.side === 'W') {
-          slot = { x: -W / 2 + inset, z: t, yaw: w.yaw, is2D };
-        } else if (w.side === 'E') {
-          slot = { x: W / 2 - inset, z: t, yaw: w.yaw, is2D };
-        }
-        slots[idx] = slot;
+    let tVals = [];
+    if (m === 1) {
+      tVals = [(seg.tStart + seg.tEnd) / 2];
+    } else {
+      const step = seg.usableRange / (m - 1);
+      for (let j = 0; j < m; j++) {
+        tVals.push(seg.tStart + j * step);
       }
     }
+
+    seg.items.forEach(({ idx, is2D }, k) => {
+      const t = tVals[k];
+      const inset = is2D ? inset2D : inset3D;
+
+      let slot;
+      if (seg.side === 'N') {
+        slot = { x: t, z: -D / 2 + inset, yaw: seg.yaw, is2D };
+      } else if (seg.side === 'S') {
+        slot = { x: t, z: D / 2 - inset, yaw: seg.yaw, is2D };
+      } else if (seg.side === 'W') {
+        slot = { x: -W / 2 + inset, z: t, yaw: seg.yaw, is2D };
+      } else if (seg.side === 'E') {
+        slot = { x: W / 2 - inset, z: t, yaw: seg.yaw, is2D };
+      }
+      slots[idx] = slot;
+    });
   }
 
   return slots;

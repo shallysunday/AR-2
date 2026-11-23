@@ -7,7 +7,7 @@ import {
 
 const MAX_ARTWORKS_3D = 80;
 const CONCURRENT_MODELS = 3;
-const PLAQUE_W = 1.1, PLAQUE_H = 0.72;
+const PLAQUE_W = 0.95, PLAQUE_H = 0.62;
 const TALL_WALL_H = 40;
 
 const CLASS_PASTEL_COLORS = {
@@ -17,44 +17,66 @@ const CLASS_PASTEL_COLORS = {
   'AT201': '#DCD6F7'
 };
 
-function makeSignCanvas(classCode, className) {
-  const W = 512, H = 160;
+function makeSignCanvas(className, isExit = true) {
+  const W = 768, H = 192;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
 
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+
+  // Modern architectural portal lintel plaque
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
   ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(8, 8, W - 16, H - 16, 20);
-  else ctx.rect(8, 8, W - 16, H - 16);
+  if (ctx.roundRect) ctx.roundRect(10, 10, W - 20, H - 20, 24);
+  else ctx.rect(10, 10, W - 20, H - 20);
   ctx.fill();
+
   ctx.strokeStyle = '#1b1b1a';
   ctx.lineWidth = 4;
   ctx.stroke();
 
   const ink = '#1b1b1a';
-  const cx = 64;
   ctx.strokeStyle = ink;
   ctx.lineWidth = 7;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  ctx.beginPath();
-  ctx.moveTo(cx, 115); ctx.lineTo(cx, 48); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cx - 18, 66); ctx.lineTo(cx, 42); ctx.lineTo(cx + 18, 66); ctx.stroke();
+  const cx = 72, cy = H / 2;
+  if (isExit) {
+    // Next room forward arrow
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + 34); ctx.lineTo(cx, cy - 34); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - 20, cy - 14); ctx.lineTo(cx, cy - 36); ctx.lineTo(cx + 20, cy - 14); ctx.stroke();
+  } else {
+    // Previous room return arrow
+    ctx.beginPath();
+    ctx.moveTo(cx + 16, cy + 30);
+    ctx.lineTo(cx + 16, cy - 8);
+    ctx.arc(cx, cy - 8, 16, 0, Math.PI, true);
+    ctx.lineTo(cx - 16, cy + 30);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - 28, cy + 16); ctx.lineTo(cx - 16, cy + 32); ctx.lineTo(cx - 4, cy + 16); ctx.stroke();
+  }
 
-  const textX = 115;
-  const textMaxW = W - textX - 24;
+  const textX = 135;
+  const textMaxW = W - textX - 32;
+  const cleanName = (className || '').toUpperCase();
+
+  // Find optimal large font size so class name is prominent and bold
+  let fontSize = 44;
+  ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  while (ctx.measureText(cleanName).width > textMaxW && fontSize > 24) {
+    fontSize -= 2;
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  }
+
   ctx.fillStyle = ink;
   ctx.textAlign = 'left';
-
-  ctx.font = 'bold 22px -apple-system, sans-serif';
-  ctx.fillText((classCode || '').toUpperCase(), textX, 58);
-
-  ctx.font = 'bold 28px -apple-system, sans-serif';
-  ctx.fillText(clamp(ctx, (className || '').toUpperCase(), textMaxW), textX, 104);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(clamp(ctx, cleanName, textMaxW), textX, H / 2);
 
   return c;
 }
@@ -369,7 +391,7 @@ export class ArchitecturalGallery {
     };
 
     const plaqueGeo = new THREE.PlaneGeometry(PLAQUE_W, PLAQUE_H);
-    const signGeo = new THREE.PlaneGeometry(2.4, 0.75);
+    const signGeo = new THREE.PlaneGeometry(3.2, 0.8);
     const pedestalGeo = new THREE.BoxGeometry(1.2, 1.1, 1.2);
 
     const signTextures = new Map();
@@ -409,9 +431,15 @@ export class ArchitecturalGallery {
       this.buildWalls(room, entry, H, wallMat);
       this.createFloatingLighting(room, entry.W, entry.D);
 
+      // Sign on top of exit door leading to next room
       const nextCi = (entry.ci + 1) % this.classes.length;
       const nextCls = this.classes[nextCi] || cls;
-      this.createSign(room, entry, nextCls.code, nextCls.name, signGeo, signTextures);
+      this.createDoorSign(room, entry.exit.side, entry.exit.pos, nextCls.name, true, signGeo, signTextures);
+
+      // Sign on top of entry door leading to previous room (South wall: [0, entry.D / 2])
+      const prevCi = (entry.ci - 1 + this.classes.length) % this.classes.length;
+      const prevCls = this.classes[prevCi] || cls;
+      this.createDoorSign(room, 'S', [0, entry.D / 2], prevCls.name, false, signGeo, signTextures);
 
       const slots = artSlots(entry, cls.items);
       cls.items.forEach((art, idx) => {
@@ -636,37 +664,30 @@ export class ArchitecturalGallery {
     if (exit.side !== 'E') segment(halfW, -halfD, halfW, halfD);
   }
 
-  createSign(group, entry, code, name, geometry, cache) {
-    if (!cache.has(code)) {
-      const texture = new THREE.CanvasTexture(makeSignCanvas(code, name));
+  createDoorSign(group, wallSide, doorPos, name, isExit, geometry, cache) {
+    const cacheKey = `${isExit ? 'exit' : 'entry'}_${name}`;
+    if (!cache.has(cacheKey)) {
+      const texture = new THREE.CanvasTexture(makeSignCanvas(name, isExit));
       texture.colorSpace = THREE.SRGBColorSpace;
-      cache.set(code, texture);
+      cache.set(cacheKey, texture);
     }
 
-    const sign = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: cache.get(code), transparent: true }));
+    const sign = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: cache.get(cacheKey), transparent: true }));
     const wallInset = WALL_T / 2 + 0.04;
-    const signY = 3.2;
-    const offset = DOOR_W / 2 + 1.6;
+    const signY = 5.55; // Mounted on top of the door arch (peak is at 5.0m)
 
-    const exit = entry.exit;
-    if (!exit) return;
-
-    // Place the directional sign beside the door leading to the next room
-    if (exit.side === 'N') {
-      let sx = exit.pos[0] + offset;
-      if (sx + 1.3 > entry.W / 2 - 0.5) sx = exit.pos[0] - offset;
-      sign.position.set(sx, signY, -entry.D / 2 + wallInset);
-      sign.rotation.y = 0; // Facing +z into the room towards approaching visitor
-    } else if (exit.side === 'W') {
-      let sz = exit.pos[1] + offset;
-      if (sz + 1.3 > entry.D / 2 - 0.5) sz = exit.pos[1] - offset;
-      sign.position.set(-entry.W / 2 + wallInset, signY, sz);
-      sign.rotation.y = Math.PI / 2; // Facing +x into the room
-    } else if (exit.side === 'E') {
-      let sz = exit.pos[1] - offset;
-      if (sz - 1.3 < -entry.D / 2 + 0.5) sz = exit.pos[1] + offset;
-      sign.position.set(entry.W / 2 - wallInset, signY, sz);
-      sign.rotation.y = -Math.PI / 2; // Facing -x into the room
+    if (wallSide === 'S') {
+      sign.position.set(doorPos[0], signY, doorPos[1] - wallInset);
+      sign.rotation.y = Math.PI; // Facing into room (-z)
+    } else if (wallSide === 'N') {
+      sign.position.set(doorPos[0], signY, doorPos[1] + wallInset);
+      sign.rotation.y = 0; // Facing into room (+z)
+    } else if (wallSide === 'W') {
+      sign.position.set(doorPos[0] + wallInset, signY, doorPos[1]);
+      sign.rotation.y = Math.PI / 2; // Facing into room (+x)
+    } else if (wallSide === 'E') {
+      sign.position.set(doorPos[0] - wallInset, signY, doorPos[1]);
+      sign.rotation.y = -Math.PI / 2; // Facing into room (-x)
     }
     group.add(sign);
   }
@@ -720,7 +741,7 @@ export class ArchitecturalGallery {
       canvasMesh.geometry = new THREE.PlaneGeometry(w, h);
       canvasMesh.position.z = frameD / 2 + 0.005;
 
-      plaqueMesh.position.set(frameW / 2 + 0.65, -frameH / 2 + 0.35, 0.02);
+      plaqueMesh.position.set(frameW / 2 + PLAQUE_W / 2 + 0.08, -frameH / 2 + PLAQUE_H / 2 + 0.05, 0.02);
     };
 
     if (art.thumbnail) {
